@@ -18,6 +18,9 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# Session data (may contain secrets)
+mem_session/
+
 # Local scripts (not needed on server)
 *_backup_*.py
 backtest_*.py

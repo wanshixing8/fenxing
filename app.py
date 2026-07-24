@@ -11,7 +11,7 @@ from datetime import datetime
 import random
 import hashlib
 import os
-from fractal_api import compute_fractal, fetch_stock_name, fetch_realtime_price
+from fractal_api_v2 import compute_fractal, fetch_stock_name, fetch_realtime_price
 
 st.set_page_config(
     page_title="河与岸 · 分形投射",

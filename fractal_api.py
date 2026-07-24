@@ -85,7 +85,7 @@ def fetch_kline(code: str, period: str, count: int = 320) -> list[dict]:
 
 
 def fetch_daily_kline(code: str, count: int = 160) -> list[dict]:
-    """拉日线（腾讯用独立的前复权接口）"""
+    """拉日线（前复权 qfq，与海王星终端导出数据一致）"""
     tc = _tencent_code(code)
     url = f"http://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={tc},day,,,{count},qfq"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -104,8 +104,10 @@ def fetch_daily_kline(code: str, count: int = 160) -> list[dict]:
     else:
         raise last_err
 
-    # 腾讯日线前复权格式: [日期, 开, 收, 高, 低, 成交量(股)]
-    rows = data["data"][tc].get("qfqday", []) or data["data"][tc].get("day", [])
+    # 前复权 key 为 "qfqday"，格式: [日期, 开, 收, 高, 低, 成交量(股)]
+    rows = data["data"][tc].get("qfqday", [])
+    if not rows:
+        rows = data["data"][tc].get("day", [])
     bars = []
     for r in rows:
         dt = datetime.strptime(r[0], "%Y-%m-%d")
@@ -241,7 +243,7 @@ def compute_fractal(code: str, level: str = "all", pin_price: float | None = Non
     daily = None
     if level in ("daily", "all"):
         try:
-            daily_bars = fetch_daily_kline(code, 160)
+            daily_bars = fetch_daily_kline(code, 800)  # API上限~3年
             daily_dedup = _deduplicate(daily_bars)
             daily_prices = [b["c"] for b in daily_dedup]
             daily_piv_y, daily_piv_t = _find_pivots(daily_dedup, "daily")
@@ -292,7 +294,7 @@ def compute_fractal(code: str, level: str = "all", pin_price: float | None = Non
     min5 = None
     if level in ("5min", "all"):
         try:
-            bars5 = fetch_5min_kline(code, 640)
+            bars5 = fetch_5min_kline(code, 800)  # API上限~66小时
             dedup5 = _deduplicate(bars5)
             piv_y5, piv_t5 = _find_pivots(dedup5, "5min")
             gen5 = _build_generator(piv_y5, piv_t5)
