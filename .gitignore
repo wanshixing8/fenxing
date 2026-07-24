@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Data exports (local only)
+*.txt
+!requirements.txt
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local scripts (not needed on server)
+*_backup_*.py
+backtest_*.py
+*_tunnel*.py
+*tunnel*.py
+*rank*.py
+scan_*.py
+serve.py
+static_serve.py
+debug_*.py
+volume_*.py
+wind_*.py
+*ngrok*
+*serveo*
+*lhr*
+*.bat
+MEMORY.md
+PROFILE.md
+SOUL.md
+AGENTS.md
+CONSTITUTION.md
+memory/
+auto_fractal_chart.html
+workspace_prefs.json
