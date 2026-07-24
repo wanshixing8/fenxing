@@ -95,6 +95,26 @@ with col_logout:
         st.session_state.authenticated = False
         st.rerun()
 
+# ═══════════════════════════════════════════
+#  风险提示
+# ═══════════════════════════════════════════
+
+st.markdown("""
+<div style="
+    background: linear-gradient(90deg, #3d1a1a, #2d1515);
+    border: 1px solid #d32f2f; border-left: 4px solid #d32f2f;
+    border-radius: 8px; padding: 10px 16px; margin: 8px 0 14px 0;
+    font-size: 12px; line-height: 1.7; color: #e0a0a0;
+">
+    <strong style="color:#ff6b6b;font-size:13px">⚠️ 风险郑重提示</strong><br>
+    本网站仅为金融时间序列分形算法<strong>技术演示程序</strong>，仅对历史 K 线图形进行数学绘图展示。<br>
+    本工具<strong>不提供</strong>任何证券分析、行情预测、选股、买卖操作建议，<strong>不构成</strong>任何投资咨询意见。<br>
+    股票、金融市场存在极高风险，所有市场形态历史走势<strong>不能推演</strong>未来收益。<br>
+    作者<strong>不承担</strong>任何用户依据本页面图形自行交易产生的盈亏责任。<br>
+    严禁将本工具作为交易决策依据。
+</div>
+""", unsafe_allow_html=True)
+
 # 代码输入 + 回车即分析
 code = st.text_input("股票代码", value="601238", placeholder="如 601238、600519",
                      key="code_input", on_change=lambda: st.session_state.update(trigger_go=True))
