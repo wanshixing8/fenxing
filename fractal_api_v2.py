@@ -368,6 +368,7 @@ def compute_fractal(code: str, level: str = "all"):
 
     # ── 加载/合成日线 ──
     daily_bars = []
+    fractals_D = []  # 初始化，防止单层级别时未定义
     if has_local_daily and level in ("daily", "all"):
         try:
             daily_bars = load_daily_local(src_daily)
