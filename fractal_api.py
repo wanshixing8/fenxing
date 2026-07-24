@@ -85,8 +85,34 @@ def fetch_kline(code: str, period: str, count: int = 320) -> list[dict]:
 
 
 def fetch_daily_kline(code: str, count: int = 160) -> list[dict]:
-    """拉日线"""
-    return fetch_kline(code, "day", count)
+    """拉日线（腾讯用独立的前复权接口）"""
+    tc = _tencent_code(code)
+    url = f"http://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={tc},day,,,{count},qfq"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+
+    MAX_RETRIES = 3
+    last_err = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            raw = urllib.request.urlopen(req, timeout=15).read().decode()
+            data = json.loads(raw)
+            break
+        except Exception as e:
+            last_err = e
+            if attempt < MAX_RETRIES - 1:
+                import time; time.sleep(2 * (attempt + 1))
+    else:
+        raise last_err
+
+    # 腾讯日线前复权格式: [日期, 开, 收, 高, 低, 成交量(股)]
+    rows = data["data"][tc].get("qfqday", []) or data["data"][tc].get("day", [])
+    bars = []
+    for r in rows:
+        dt = datetime.strptime(r[0], "%Y-%m-%d")
+        o, c, h, l = float(r[1]), float(r[2]), float(r[3]), float(r[4])
+        vol = float(r[5])
+        bars.append({"dt": dt, "o": o, "h": h, "l": l, "c": round(c, 2), "vol": vol, "amt": 0})
+    return bars
 
 
 def fetch_30min_kline(code: str, count: int = 320) -> list[dict]:
