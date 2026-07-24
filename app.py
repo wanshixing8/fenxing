@@ -95,19 +95,22 @@ with col_logout:
         st.session_state.authenticated = False
         st.rerun()
 
-col_code, col_level, col_go, col_refresh = st.columns([2, 1.5, 1, 1])
+# 代码输入 + 回车即分析
+code = st.text_input("股票代码", value="601238", placeholder="如 601238、600519",
+                     key="code_input", on_change=lambda: st.session_state.update(trigger_go=True))
 
-with col_code:
-    code = st.text_input("股票代码", value="601238", placeholder="如 601238、600519", key="code_input")
+col_level, col_go, col_refresh = st.columns([2, 2, 1])
 
 with col_level:
     level = st.selectbox("级别", ["all", "daily", "30min", "5min"],
                          format_func=lambda x: {"all": "全部三级", "daily": "日线",
-                                                "30min": "30分钟", "5min": "5分钟"}[x])
+                                                "30min": "30分钟", "5min": "5分钟"}[x],
+                         on_change=lambda: st.session_state.update(trigger_go=True))
 
 with col_go:
-    st.write("")  # spacer
-    go_clicked = st.button("🔍 分析", use_container_width=True, key="go_btn")
+    st.write("")
+    go_clicked = st.button("🔍 开始分析", use_container_width=True, key="go_btn",
+                           type="primary")
 
 with col_refresh:
     st.write("")
@@ -124,12 +127,16 @@ if auto_refresh:
 #  计算 & 渲染
 # ═══════════════════════════════════════════
 
-# 首次加载或点击分析
-if go_clicked or "last_result" not in st.session_state:
+# 首次加载或点击分析（含回车触发）
+if "trigger_go" not in st.session_state:
+    st.session_state.trigger_go = False
+
+if go_clicked or st.session_state.trigger_go:
     with st.spinner(f"📡 正在获取 {code} 数据..."):
         result = compute_fractal(code, level)
     st.session_state.last_result = result
     st.session_state.last_code = code
+    st.session_state.trigger_go = False
 else:
     result = st.session_state.get("last_result", {})
 
