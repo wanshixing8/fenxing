@@ -274,22 +274,20 @@ async function fetchKline(code, period, count) {
     const data = await resp.json();
     rows = data.data?.[tc]?.[period];
   } catch(e) {
-    // ── L3b: CORS被拦？走Streamlit代理 ──
-    console.warn('腾讯直连失败，走Streamlit代理', e.message);
+    // ── L3b: postMessage代理（宿主页面fetch腾讯API，不受iframe CSP限制）──
+    console.warn('腾讯直连失败，走postMessage代理', e.message);
     try {
-      const proxyUrl = `${PROXY_BASE}/?code=${code}&period=${period}&count=${count}`;
-      const resp2 = await fetch(proxyUrl);
-      if (!resp2.ok) throw new Error(`Proxy HTTP ${resp2.status}`);
-      const text = await resp2.text();
-      let data2;
-      try { data2 = JSON.parse(text); } catch {
-        const m = text.match(/__JSON__([\s\S]*?)__JSON__/);
-        if (m) data2 = JSON.parse(m[1]);
-        else throw new Error('Proxy非JSON响应');
+      const bars = await postMessageProxy({
+        type: 'kline', code: code, period: period, count: count
+      });
+      if (bars && bars.length) {
+        console.log(`📡 postMessage代理 ${period}: ${bars.length}根`);
+        cachePut(code, period, bars, code).catch(()=>{});
+        return bars;
       }
-      rows = data2.data?.[tc]?.[period];
+      throw new Error('代理返回空');
     } catch(e2) {
-      console.warn('Streamlit代理也失败', e2.message);
+      console.warn('postMessage代理也失败', e2.message);
     }
   }
   if (!rows || !rows.length) throw new Error('无K线数据');
@@ -319,15 +317,41 @@ async function fetchName(code) {
       if (m) return m[1];
     }
   } catch(e) {}
-  // 兜底：走Streamlit代理
+  // 兜底：postMessage代理
   try {
-      const resp2 = await fetch(`${PROXY_BASE}/?name_code=${tc}`);
-      if (resp2.ok) {
-        const data2 = await resp2.json();
-        if (data2.name) return data2.name;
-      }
+    const result = await postMessageProxy({type: 'name', code: tc});
+    if (result && result.name) return result.name;
   } catch(e2) {}
-  return code; // 最终兜底：返回代码本身
+  return code;
+}
+
+// ── postMessage 数据代理（宿主页面fetch，绕过iframe CSP）──
+let _proxyReqId = 0;
+const _proxyPending = {};
+window.addEventListener('message', function(e) {
+  const msg = e.data;
+  if (msg && msg.src === 'fractal_proxy' && msg.reqId && _proxyPending[msg.reqId]) {
+    _proxyPending[msg.reqId](msg);
+    delete _proxyPending[msg.reqId];
+  }
+});
+function postMessageProxy(msg) {
+  return new Promise(function(resolve, reject) {
+    const reqId = ++_proxyReqId;
+    _proxyPending[reqId] = function(reply) {
+      if (reply.ok) resolve(reply);
+      else reject(new Error(reply.error || '代理失败'));
+    };
+    msg.src = 'fractal_pwa';
+    msg.reqId = reqId;
+    window.parent.postMessage(msg, '*');
+    setTimeout(function() {
+      if (_proxyPending[reqId]) {
+        delete _proxyPending[reqId];
+        reject(new Error('代理超时'));
+      }
+    }, 15000);
+  });
 }
 
 // ── 分形检测 ──
