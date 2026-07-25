@@ -266,45 +266,36 @@ async function fetchKline(code, period, count) {
 
   // ── L3: 腾讯API（320根兜底）──
   const tc = tencentCode(code);
-  const isDay = period === 'day' || period === 'daily';
-  // 日线/周线走 fqkline（前复权），分钟线走 mkline
-  const apiPeriod = isDay ? 'qfqday' : period;
-  const url = isDay
-    ? `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${tc},day,,,${count},qfq`
-    : `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${tc},${period},,${count}`;
+  const url = `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${tc},${period},,${count}`;
   let rows;
   try {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
-    rows = data.data?.[tc]?.[apiPeriod];
+    rows = data.data?.[tc]?.[period];
   } catch(e) {
-    // ── L3b: 同源查询代理（fetch /?proxy=... , Python端抓腾讯API）──
-    console.warn('腾讯直连失败，走同源查询代理', e.message);
+    // ── L3b: postMessage代理（宿主页面fetch腾讯API，不受iframe CSP限制）──
+    console.warn('腾讯直连失败，走postMessage代理', e.message);
     try {
-      const bars = await queryProxy(code + ',' + period + ',' + count);
+      const bars = await localStorageProxy({
+        type: 'kline', code: code, period: period, count: count
+      });
       if (bars && bars.length) {
-        console.log(`📡 查询代理 ${period}: ${bars.length}根`);
+        console.log(`📡 postMessage代理 ${period}: ${bars.length}根`);
         cachePut(code, period, bars, code).catch(()=>{});
         return bars;
       }
       throw new Error('代理返回空');
     } catch(e2) {
-      console.warn('查询代理也失败', e2.message);
+      console.warn('postMessage代理也失败', e2.message);
     }
   }
   if (!rows || !rows.length) throw new Error('无K线数据');
   const bars = rows.map(r => {
     let dt;
-    if (isDay) {
-      // fqkline 返回: ["2025-04-01","8.440","8.510","8.570","8.420","249368.000"]
+    if (period === 'day' || period === 'daily') {
       const s = r[0];
-      if (s.includes('-')) {
-        const parts = s.split('-');
-        dt = new Date(+parts[0], +parts[1] - 1, +parts[2]);
-      } else {
-        dt = new Date(+s.slice(0,4), +s.slice(4,6) - 1, +s.slice(6,8));
-      }
+      dt = new Date(+s.slice(0,4), +s.slice(4,6) - 1, +s.slice(6,8));
     } else {
       const s = r[0];
       dt = new Date(+s.slice(0,4), +s.slice(4,6) - 1, +s.slice(6,8), +s.slice(8,10), +s.slice(10,12));
@@ -326,32 +317,53 @@ async function fetchName(code) {
       if (m) return m[1];
     }
   } catch(e) {}
-  // 兜底：同源查询代理
+  // 兜底：postMessage代理
   try {
-    const result = await queryProxy(tc + ',__name');
+    const result = await localStorageProxy({type: 'name', code: tc});
     if (result && result.name) return result.name;
   } catch(e2) {}
   return code;
 }
 
-// ── 同源查询代理（PWA iframe fetch /?proxy=... , Streamlit Python端抓腾讯API）──
-// 原理: iframe有allow-same-origin, 同源fetch不受sandbox限制
-//       Streamlit检测到?proxy=参数时抓取腾讯API, 返回<div id="fx-data">JSON</div>
-//       PWA正则提取JSON
-async function queryProxy(param) {
-  // param: "sh601238,m5,320" 或 "sh601238__name"
-  const url = '/?proxy=' + encodeURIComponent(param);
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error('HTTP ' + resp.status);
-  const text = await resp.text();
-  const m = text.match(/<div id="fx-data"[^>]*>(.*?)<\/div>/);
-  if (!m) throw new Error('解析响应失败');
-  const data = JSON.parse(m[1]);
-  if (data.ok) {
-    // kline返回data.bars, name返回data.name
-    return data.bars || data;
+// ── localStorage 数据代理（与代理iframe通信，绕过CSP）──
+let _proxyReqId = 0;
+const _proxyPending = {};
+
+// 监听代理iframe的回包
+window.addEventListener('storage', function(e) {
+  if (!e.key || !e.key.startsWith('fx_res_')) return;
+  if (!e.newValue) return;
+  var reqId = e.key.slice(7);
+  if (_proxyPending[reqId]) {
+    try {
+      var res = JSON.parse(e.newValue);
+      _proxyPending[reqId](res);
+    } catch(ex) {
+      _proxyPending[reqId]({ok: false, error: 'parse error'});
+    }
+    delete _proxyPending[reqId];
+    localStorage.removeItem(e.key);
   }
-  throw new Error(data.error || '代理失败');
+});
+
+function localStorageProxy(msg) {
+  return new Promise(function(resolve, reject) {
+    var reqId = ++_proxyReqId;
+    _proxyPending[reqId] = function(reply) {
+      if (reply.ok) resolve(reply);
+      else reject(new Error(reply.error || '代理失败'));
+    };
+    msg.reqId = reqId;
+    localStorage.setItem('fx_req_' + reqId, JSON.stringify(msg));
+    // 超时兜底
+    setTimeout(function() {
+      if (_proxyPending[reqId]) {
+        delete _proxyPending[reqId];
+        localStorage.removeItem('fx_req_' + reqId);
+        reject(new Error('代理超时'));
+      }
+    }, 15000);
+  });
 }
 
 // ── 分形检测 ──
