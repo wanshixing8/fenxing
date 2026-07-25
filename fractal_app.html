@@ -144,7 +144,7 @@ function cacheAge(code, period) {
 // ═══════════════════════════════════════════════════
 const ON_SERVE = (() => {
   const h = location.hostname;
-  return h && h !== 'localhost' && !h.includes('github.io') && !h.includes('loca.lt') && !h.includes('127.0.0.1');
+  return h && h !== 'localhost' && !h.includes('github.io') && !h.includes('streamlit.app') && !h.includes('loca.lt') && !h.includes('127.0.0.1');
 })();
 const BASE = ON_SERVE ? '' : '';
 
