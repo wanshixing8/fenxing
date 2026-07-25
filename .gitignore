@@ -45,6 +45,7 @@ CONSTITUTION.md
 memory/
 auto_fractal_chart.html
 workspace_prefs.json
+publish/
 
 # Local dev cruft (keep out of repo)
 _*.py
