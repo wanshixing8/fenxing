@@ -35,18 +35,29 @@ if "proxy" in params:
             code = parts[0]
             period = parts[1] if len(parts) > 1 else "m5"
             count = parts[2] if len(parts) > 2 else "320"
-            url = f"https://ifzq.gtimg.cn/appstock/app/kline/mkline?param={code},{period},,{count}"
+            is_day = period in ("day", "daily")
+            if is_day:
+                url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={code},day,,,{count},qfq"
+                api_period = "qfqday"
+            else:
+                url = f"https://ifzq.gtimg.cn/appstock/app/kline/mkline?param={code},{period},,{count}"
+                api_period = period
             req = urllib.request.Request(url, headers={
                 "User-Agent": "Mozilla/5.0",
                 "Referer": "https://finance.qq.com"
             })
             with urllib.request.urlopen(req, timeout=10) as r:
                 data = json_mod.loads(r.read().decode("utf-8"))
-            rows = ((data.get("data") or {}).get(code) or {}).get(period) or []
+            rows = ((data.get("data") or {}).get(code) or {}).get(api_period) or []
             bars = []
             for r_ in rows:
                 s = r_[0]
-                if len(s) == 12:
+                if is_day:
+                    if "-" in s:
+                        dt = s  # 已是 "2025-04-01" 格式
+                    else:
+                        dt = s[:4] + "-" + s[4:6] + "-" + s[6:8]
+                elif len(s) == 12:
                     dt = s[:4] + "-" + s[4:6] + "-" + s[6:8] + "T" + s[8:10] + ":" + s[10:12]
                 else:
                     dt = s[:4] + "-" + s[4:6] + "-" + s[6:8]
