@@ -205,27 +205,20 @@ async function syncPivots() {
 if (DEPLOY_BASE) document.getElementById('btnSync').style.display = '';
 
 async function fetchKline(code, period, count) {
-  // ── L0: 服务端预注入数据（Streamlit注入，绕过iframe CSP）──
-  if (window.__PRELOAD__ && window.__PRELOAD__.data) {
-    const tc = tencentCode(code);
-    const rows = window.__PRELOAD__.data?.[tc]?.[period];
-    if (rows && rows.length) {
-      console.log(`🚀 服务端预加载 ${period}: ${rows.length}根`);
-      const bars = rows.map(r => {
-        let dt;
-        if (period === 'day' || period === 'daily') {
-          const s = r[0]; dt = new Date(+s.slice(0,4), +s.slice(4,6) - 1, +s.slice(6,8));
-        } else {
-          const s = r[0]; dt = new Date(+s.slice(0,4), +s.slice(4,6) - 1, +s.slice(6,8), +s.slice(8,10), +s.slice(10,12));
-        }
-        return { dt, o: +r[1], c: +r[2], h: +r[3], l: +r[4], vol: (+r[5]||0) * 100 };
-      });
-      cachePut(code, period, bars, code).catch(()=>{});
-      window.__PRELOAD__ = null; // 只用一次
-      return bars;
+  // ── L0: 服务端预注入数据（Streamlit渲染时注入，跳过网络请求）──
+  if (window.__PRELOAD__) {
+    const key = `${code}__${period}`;
+    const bars = window.__PRELOAD__[key];
+    if (bars && bars.length) {
+      console.log(`🚀 服务端预加载 ${period}: ${bars.length}根`);
+      const parsed = bars.map(b => ({
+        dt: new Date(b.dt),
+        o: b.o, c: b.c, h: b.h, l: b.l, vol: b.vol
+      }));
+      cachePut(code, period, parsed, code).catch(()=>{});
+      return parsed;
     }
   }
-  window.__PRELOAD__ = null;
 
   // ── L1: serve.py 全量数据（仅WiFi下可用）──
   if (ON_SERVE && period === 'm5') {
@@ -281,22 +274,20 @@ async function fetchKline(code, period, count) {
     const data = await resp.json();
     rows = data.data?.[tc]?.[period];
   } catch(e) {
-    // ── L3b: CORS被拦？走Streamlit代理 ──
-    console.warn('腾讯直连失败，走Streamlit代理', e.message);
+    // ── L3b: postMessage代理（宿主页面fetch腾讯API，不受iframe CSP限制）──
+    console.warn('腾讯直连失败，走postMessage代理', e.message);
     try {
-      const proxyUrl = `${PROXY_BASE}/?code=${code}&period=${period}&count=${count}`;
-      const resp2 = await fetch(proxyUrl);
-      if (!resp2.ok) throw new Error(`Proxy HTTP ${resp2.status}`);
-      const text = await resp2.text();
-      let data2;
-      try { data2 = JSON.parse(text); } catch {
-        const m = text.match(/__JSON__([\s\S]*?)__JSON__/);
-        if (m) data2 = JSON.parse(m[1]);
-        else throw new Error('Proxy非JSON响应');
+      const bars = await localStorageProxy({
+        type: 'kline', code: code, period: period, count: count
+      });
+      if (bars && bars.length) {
+        console.log(`📡 postMessage代理 ${period}: ${bars.length}根`);
+        cachePut(code, period, bars, code).catch(()=>{});
+        return bars;
       }
-      rows = data2.data?.[tc]?.[period];
+      throw new Error('代理返回空');
     } catch(e2) {
-      console.warn('Streamlit代理也失败', e2.message);
+      console.warn('postMessage代理也失败', e2.message);
     }
   }
   if (!rows || !rows.length) throw new Error('无K线数据');
@@ -326,15 +317,53 @@ async function fetchName(code) {
       if (m) return m[1];
     }
   } catch(e) {}
-  // 兜底：走Streamlit代理
+  // 兜底：postMessage代理
   try {
-      const resp2 = await fetch(`${PROXY_BASE}/?name_code=${tc}`);
-      if (resp2.ok) {
-        const data2 = await resp2.json();
-        if (data2.name) return data2.name;
-      }
+    const result = await localStorageProxy({type: 'name', code: tc});
+    if (result && result.name) return result.name;
   } catch(e2) {}
-  return code; // 最终兜底：返回代码本身
+  return code;
+}
+
+// ── localStorage 数据代理（与代理iframe通信，绕过CSP）──
+let _proxyReqId = 0;
+const _proxyPending = {};
+
+// 监听代理iframe的回包
+window.addEventListener('storage', function(e) {
+  if (!e.key || !e.key.startsWith('fx_res_')) return;
+  if (!e.newValue) return;
+  var reqId = e.key.slice(7);
+  if (_proxyPending[reqId]) {
+    try {
+      var res = JSON.parse(e.newValue);
+      _proxyPending[reqId](res);
+    } catch(ex) {
+      _proxyPending[reqId]({ok: false, error: 'parse error'});
+    }
+    delete _proxyPending[reqId];
+    localStorage.removeItem(e.key);
+  }
+});
+
+function localStorageProxy(msg) {
+  return new Promise(function(resolve, reject) {
+    var reqId = ++_proxyReqId;
+    _proxyPending[reqId] = function(reply) {
+      if (reply.ok) resolve(reply);
+      else reject(new Error(reply.error || '代理失败'));
+    };
+    msg.reqId = reqId;
+    localStorage.setItem('fx_req_' + reqId, JSON.stringify(msg));
+    // 超时兜底
+    setTimeout(function() {
+      if (_proxyPending[reqId]) {
+        delete _proxyPending[reqId];
+        localStorage.removeItem('fx_req_' + reqId);
+        reject(new Error('代理超时'));
+      }
+    }, 15000);
+  });
 }
 
 // ── 分形检测 ──
