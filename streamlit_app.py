@@ -16,11 +16,11 @@ if "code" in query and "period" in query:
     code = query.get("code", "sh601985")
     period = query.get("period", "m5")
     count = query.get("count", "320")
-    url = f"http://ifzq.gtimg.cn/appstock/app/kline/mkline?param={code},{period},,{count}"
+    url = f"https://ifzq.gtimg.cn/appstock/app/kline/mkline?param={code},{period},,{count}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         raw = urllib.request.urlopen(req, timeout=15).read()
-        st.json(json.loads(raw))
+        st.text(f"__JSON__{raw.decode('utf-8')}__JSON__")
     except Exception as e:
         st.json({"error": str(e)})
     st.stop()
