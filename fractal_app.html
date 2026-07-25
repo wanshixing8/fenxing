@@ -205,6 +205,28 @@ async function syncPivots() {
 if (DEPLOY_BASE) document.getElementById('btnSync').style.display = '';
 
 async function fetchKline(code, period, count) {
+  // ── L0: 服务端预注入数据（Streamlit注入，绕过iframe CSP）──
+  if (window.__PRELOAD__ && window.__PRELOAD__.data) {
+    const tc = tencentCode(code);
+    const rows = window.__PRELOAD__.data?.[tc]?.[period];
+    if (rows && rows.length) {
+      console.log(`🚀 服务端预加载 ${period}: ${rows.length}根`);
+      const bars = rows.map(r => {
+        let dt;
+        if (period === 'day' || period === 'daily') {
+          const s = r[0]; dt = new Date(+s.slice(0,4), +s.slice(4,6) - 1, +s.slice(6,8));
+        } else {
+          const s = r[0]; dt = new Date(+s.slice(0,4), +s.slice(4,6) - 1, +s.slice(6,8), +s.slice(8,10), +s.slice(10,12));
+        }
+        return { dt, o: +r[1], c: +r[2], h: +r[3], l: +r[4], vol: (+r[5]||0) * 100 };
+      });
+      cachePut(code, period, bars, code).catch(()=>{});
+      window.__PRELOAD__ = null; // 只用一次
+      return bars;
+    }
+  }
+  window.__PRELOAD__ = null;
+
   // ── L1: serve.py 全量数据（仅WiFi下可用）──
   if (ON_SERVE && period === 'm5') {
     try {
