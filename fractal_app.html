@@ -41,9 +41,9 @@ canvas{display:block;max-width:100%;height:auto}
   <input id="code" type="text" placeholder="输入代码" value="601238" inputmode="numeric" maxlength="6">
   <button id="go">▶</button>
   <button class="lv on" data-lv="all">All</button>
+  <button class="lv" data-lv="weekly">周</button>
   <button class="lv" data-lv="daily">日</button>
   <button class="lv" data-lv="30min">30</button>
-  <button class="lv" data-lv="5min">5</button>
   <button id="btnRefresh" style="background:#1a1a2a;border:1px dashed #555;border-radius:6px;padding:6px 8px;font-size:11px;color:#888;cursor:pointer;flex-shrink:0" onclick="toggleRefresh()" title="自动刷新（60秒）">⏱</button>
   <button id="btnSync" style="background:#1a1a2a;border:1px solid #444;border-radius:6px;padding:6px 8px;font-size:13px;cursor:pointer;flex-shrink:0;display:none" onclick="syncPivots()" title="从GitHub拉取最新拐点数据">🔄</button>
 </div>
@@ -63,7 +63,6 @@ canvas{display:block;max-width:100%;height:auto}
 const C = document.getElementById('c');
 const X = C.getContext('2d');
 let currentLevel = 'all';
-let WD = 0, W30 = 0, W5 = 0;  // for draw closure
 
 // ── Toast ──
 let toastTimer;
@@ -145,34 +144,40 @@ const ON_SERVE = (() => {
 })();
 const BASE = ON_SERVE ? '' : '';
 
-// ── 稳私提示：拐点JSON缺失/过旧时警告 ──
+// ── 拐点JSON（优先用预计算，兜底自己算）──
 const DEPLOY_BASE = '';  // 设为 'https://xxx.github.io/fractal-app/deploy' 部署后改
 const STALE_DAYS = 5;
+
+// ── 稳私提示 ──
 function showWarn(msg) {
   const w = document.getElementById('stale-warn');
   w.textContent = msg;
   w.classList.add('show');
 }
-async function checkStaleData(code) {
-  if (!DEPLOY_BASE) return;
+
+// ── 拉取拐点JSON（含周/日/30min三层预计算）──
+async function fetchPivots(code) {
+  if (!DEPLOY_BASE) return null;
   try {
     const resp = await fetch(`${DEPLOY_BASE}/pivots_${code}.json`);
     if (!resp.ok) {
-      // 404 = 该标的不在推送范围内
-      if (resp.status === 404) {
-        showWarn('⚠️ 该标的不在推送范围，数据可能不全（点击关闭）');
-      }
-      return;
+      if (resp.status === 404) showWarn('⚠️ 该标的不在推送范围，数据可能不全（点击关闭）');
+      return null;
     }
     const piv = await resp.json();
-    if (!piv.updated) return;
-    const age = (Date.now() - new Date(piv.updated).getTime()) / 86400000;
-    if (age > STALE_DAYS) {
-      showWarn(`⚠️ 数据最后更新于 ${piv.updated}，可能不全。连本地WiFi可同步全量。（点击关闭）`);
-    } else {
-      toast(`✅ 拐点数据 ${piv.updated} 更新`);
+    if (piv.updated) {
+      const age = (Date.now() - new Date(piv.updated).getTime()) / 86400000;
+      if (age > STALE_DAYS) {
+        showWarn(`⚠️ 数据最后更新于 ${piv.updated}，可能不全。连本地WiFi可同步全量。（点击关闭）`);
+      }
     }
-  } catch {}
+    return piv;
+  } catch { return null; }
+}
+
+async function checkStaleData(code) {
+  if (!DEPLOY_BASE) return;
+  await fetchPivots(code);  // 副作用：稳私提示
 }
 
 // ── 手动触发同步 ──
@@ -374,7 +379,11 @@ async function run() {
   st.style.color = '#888';
 
   try {
-    checkStaleData(code);  // 稳私检测，不阻塞主流程
+    // L1: 优先拉取预计算拐点JSON
+    const pivots = await fetchPivots(code);
+    checkStaleData(code);  // 稳私提示（不阻塞）
+
+    // L2: 并行拉K线
     const [name, rows5, rowsD] = await Promise.all([
       fetchName(code),
       fetchKline(code, 'm5', 320),
@@ -387,46 +396,110 @@ async function run() {
     const m30 = group30min(bars5);
     const daily = rowsD.map(r => ({ ...r, c: Math.round(r.c * 100) / 100 }));
 
-    const h30 = m30.map(b => b.h), l30 = m30.map(b => b.l);
-    const f30 = findFractals(h30, l30, 5);
-    const hD = daily.map(b => b.h), lD = daily.map(b => b.l);
-    const fD = findFractals(hD, lD, 2);
+    // L3: 分形 & 生成器 — 优先用预计算，兜底自己算
+    let gW = null, gD = null, g30 = null, g5 = null;
+    let decaysW = [], decaysD = [], decays30 = [], decays5 = [];
+    let fD = null, f30 = null, f5recent = null;
+    let last30i = 0;
 
-    const g30 = makeGenerator(f30, 6);
-    const gD = makeGenerator(fD, 4);
-    const decays30 = computeDecays(g30.vals);
-    const decaysD = computeDecays(gD.vals);
+    if (pivots) {
+      // ── 使用预计算 ──
+      const genW = pivots.gen_weekly || [];
+      const genD = pivots.gen_daily || [];
+      const gen30 = pivots.gen_30min || [];
 
-    const h5 = bars5.map(b => b.h), l5 = bars5.map(b => b.l);
-    const f5all = findFractals(h5, l5, 3);
-    let last30i = f30.length ? f30[f30.length - 1].i : 0;
-    let last30dt = m30[last30i] ? m30[last30i].dt : bars5[0].dt;
-    let start5 = bars5.findIndex(b => b.dt >= last30dt);
-    if (start5 < 0) start5 = 0;
-    const f5recent = f5all.filter(f => f.i >= start5);
-    const g5 = makeGenerator(f5recent, 8);
-    const decays5 = computeDecays(g5.vals);
+      // 构造生成器对象（价格列表 + 类型列表）
+      // gen_* 已保证 H-L 交替（publish_pivots.py 做最后一拐类型推演）
+      function buildGen(vals, lastKind) {
+        if (!vals || vals.length < 3) return null;
+        const types = [];
+        // 从最后一拐反推类型
+        let kind = lastKind || 'H';
+        for (let i = vals.length - 1; i >= 0; i--) {
+          types.unshift(kind);
+          kind = kind === 'H' ? 'L' : 'H';
+        }
+        return { vals, types };
+      }
 
-    WD = 3 + Math.max(0, gD.vals.length - 3);
-    W30 = 4 + Math.max(0, g30.vals.length - 4);
-    W5 = 8 + Math.max(0, g5.vals.length - 6) * 2;
+      const lpw = pivots.last_pivot_weekly || null;
+      const lpd = pivots.last_pivot_daily || null;
+      const lp30 = pivots.last_pivot_30min || null;
+      gW = buildGen(genW, lpw ? lpw[2] : null);
+      gD = buildGen(genD, lpd ? lpd[2] : null);
+      g30 = buildGen(gen30, lp30 ? lp30[2] : null);
 
-    const parentD = (ph) => envelopeAt(ph);
-    const parent30 = (ph) => envelopeAt(ph) * parentD(ph);
+      // fD 用于市场状态检测（直接用 pivot list）
+      const pd = pivots.pivots_daily;
+      if (pd) fD = pd.map(p => ({ i: p[0], price: p[1], kind: p[2] }));
 
-    const ptsD = gD.vals.length >= 3
-      ? project(gD.vals, decaysD, gD.types[gD.types.length-1] === 'H', WD, 1.8, null, 0, 8)
-      : [];
-    const pts30 = g30.vals.length >= 3
-      ? project(g30.vals, decays30, g30.types[g30.types.length-1] === 'H', W30, 1.0, parentD, 0, 1)
-      : [];
-    const sx5 = g30.vals.length - 1;
-    const pts5 = g5.vals.length >= 3
-      ? project(g5.vals, decays5, g5.types[g5.types.length-1] === 'H', W5, 0.35, parent30, sx5, 1/6)
-      : [];
+      // 30min 和 5min 仍然从 bar 数据算（5min无预计算；30min需定位last30i）
+      const h30 = m30.map(b => b.h), l30 = m30.map(b => b.l);
+      f30 = findFractals(h30, l30, 5);
+      last30i = f30.length ? f30[f30.length - 1].i : 0;
 
-    draw(code, name, m30, gD, g30, g5, ptsD, pts30, pts5, sx5, f30, last30i);
-    updateInfo(code, name, fD, gD, g30, g5, ptsD, pts30, pts5, sx5);
+      const h5 = bars5.map(b => b.h), l5 = bars5.map(b => b.l);
+      const f5all = findFractals(h5, l5, 3);
+      let last30dt = m30[last30i] ? m30[last30i].dt : bars5[0].dt;
+      let start5 = bars5.findIndex(b => b.dt >= last30dt);
+      if (start5 < 0) start5 = 0;
+      f5recent = f5all.filter(f => f.i >= start5);
+      g5 = makeGenerator(f5recent, 8);
+      decays5 = computeDecays(g5.vals);
+
+      // decays for precomputed（默认用历史衰减均值）
+      if (genW && genW.length >= 3) decaysW = computeDecays(genW);
+      if (genD && genD.length >= 3) decaysD = computeDecays(genD);
+      if (gen30 && gen30.length >= 3) decays30 = computeDecays(gen30);
+
+      toast(`✅ 使用预计算拐点 · ${pivots.updated || '未知日期'}`);
+    } else {
+      // ── 兜底：自己从K线算（原有逻辑）──
+      gW = null; // 兜底不提供周线（需日线合成，跳过）
+      const h30 = m30.map(b => b.h), l30 = m30.map(b => b.l);
+      f30 = findFractals(h30, l30, 5);
+      const hD = daily.map(b => b.h), lD = daily.map(b => b.l);
+      fD = findFractals(hD, lD, 2);
+      gD = makeGenerator(fD, 4);
+      g30 = makeGenerator(f30, 6);
+      last30i = f30.length ? f30[f30.length - 1].i : 0;
+
+      const h5 = bars5.map(b => b.h), l5 = bars5.map(b => b.l);
+      const f5all = findFractals(h5, l5, 3);
+      let last30dt = m30[last30i] ? m30[last30i].dt : bars5[0].dt;
+      let start5 = bars5.findIndex(b => b.dt >= last30dt);
+      if (start5 < 0) start5 = 0;
+      f5recent = f5all.filter(f => f.i >= start5);
+      g5 = makeGenerator(f5recent, 8);
+      decaysD = computeDecays(gD.vals);
+      decays30 = computeDecays(g30.vals);
+      decays5 = computeDecays(g5.vals);
+    }
+
+    // 波数
+    const WD = gD && gD.vals.length >= 3 ? 1 + Math.max(0, gD.vals.length - 3) * 3 : 0;
+    const W30 = g30 && g30.vals.length >= 3 ? 4 + Math.max(0, g30.vals.length - 4) : 0;
+    const W5 = g5 && g5.vals.length >= 3 ? 8 + Math.max(0, g5.vals.length - 6) * 2 : 0;
+    const WW = gW && gW.vals.length >= 3 ? 1 + Math.max(0, gW.vals.length - 2) * 2 : 0;
+
+    // 投射
+    const parentW = (ph) => envelopeAt(ph);
+    const parentD = (ph) => envelopeAt(ph) * 0.7;
+    const parent30 = (ph) => envelopeAt(ph) * 0.5;
+    const sepX = g30 && g30.vals.length >= 1 ? g30.vals.length - 1 : 0;
+
+    let ptsW = [], ptsD = [], pts30 = [], pts5 = [];
+    if (gW && gW.vals.length >= 3)
+      ptsW = project(gW.vals, decaysW, gW.types[gW.types.length-1]==='H', WW, 3.0, null, 0, 24);
+    if (gD && gD.vals.length >= 3)
+      ptsD  = project(gD.vals, decaysD, gD.types[gD.types.length-1]==='H', WD, 1.8, null, 0, 8);
+    if (g30 && g30.vals.length >= 3)
+      pts30 = project(g30.vals, decays30, g30.types[g30.types.length-1]==='H', W30, 1.0, parentD, 0, 1);
+    if (g5 && g5.vals.length >= 3)
+      pts5  = project(g5.vals, decays5, g5.types[g5.types.length-1]==='H', W5, 0.35, parent30, sepX, 1/6);
+
+    draw(code, name, m30, gW, gD, g30, g5, ptsW, ptsD, pts30, pts5, sepX, f30, last30i);
+    updateInfo(code, name, fD, gW, gD, g30, g5, ptsW, ptsD, pts30, pts5, sepX, WW, WD, W30, W5, pivots);
 
     toast(`✅ ${code} ${name} 分析完成`);
   } catch (e) {
@@ -437,7 +510,7 @@ async function run() {
   }
 }
 
-function draw(code, name, m30, gD, g30, g5, ptsD, pts30, pts5, sepX, f30, last30i) {
+function draw(code, name, m30, gW, gD, g30, g5, ptsW, ptsD, pts30, pts5, sepX, f30, last30i) {
   const W = Math.min(1100, window.innerWidth - 4);
   const H = Math.min(650, window.innerHeight * 0.62);
   C.width = W; C.height = H;
@@ -446,15 +519,23 @@ function draw(code, name, m30, gD, g30, g5, ptsD, pts30, pts5, sepX, f30, last30
   const start30i = Math.max(0, last30i - 10);
   const viewM30 = m30.slice(start30i);
   let allY = [...viewM30.flatMap(b => [b.h, b.l])];
+  if (ptsW.length) allY = allY.concat(ptsW.map(p => p.y));
+  if (ptsD.length) allY = allY.concat(ptsD.map(p => p.y));
   if (pts30.length) allY = allY.concat(pts30.map(p => p.y));
   if (pts5.length) allY = allY.concat(pts5.map(p => p.y));
-  if (ptsD.length) allY = allY.concat(ptsD.map(p => p.y));
   if (!allY.length) allY = [0, 100];
   let ym = Math.min(...allY), yM = Math.max(...allY);
   const pad = Math.max((yM - ym) * 0.1, 0.5);
   ym -= pad; yM += pad;
 
-  const totalX = viewM30.length + sepX + Math.max(WD*0.6, W30*0.6, W5*0.6);
+  // 总投射宽度：各层归一化权重
+  const maxProj = Math.max(
+    (ptsW.length ? ptsW.length / 24 : 0),
+    (ptsD.length ? ptsD.length / 8 : 0),
+    (pts30.length ? pts30.length / 1 : 0),
+    (pts5.length ? pts5.length * 6 : 0)
+  );
+  const totalX = viewM30.length + sepX + maxProj;
   const tx = v => PL + (v / totalX) * (W - PL - PR);
   const ty = v => PT + (yM - v) / (yM - ym) * (H - PT - PB);
 
@@ -496,73 +577,95 @@ function draw(code, name, m30, gD, g30, g5, ptsD, pts30, pts5, sepX, f30, last30
     X.stroke();
   }
 
+  if (currentLevel === 'all' || currentLevel === 'weekly')
+    drawLine(ptsW, 'rgba(255,180,0,0.5)', 1.5, p => ({ x: tx(p.x / 24), y: ty(p.y) }));
+  if (currentLevel === 'all' || currentLevel === 'daily')
+    drawLine(ptsD, 'rgba(255,200,0,0.6)', 2, p => ({ x: tx(p.x / 8), y: ty(p.y) }));
   if (currentLevel === 'all' || currentLevel === '30min')
     drawLine(pts30, 'rgba(200,140,255,0.7)', 2.5, p => ({ x: tx(p.x + start30i), y: ty(p.y) }));
   if (currentLevel === 'all' || currentLevel === '5min')
     drawLine(pts5, '#4cc9f0', 2, p => ({ x: tx(p.x + start30i), y: ty(p.y) }));
-  if ((currentLevel === 'all' || currentLevel === 'daily') && ptsD.length)
-    drawLine(ptsD, 'rgba(255,200,0,0.6)', 2, p => ({ x: tx(p.x / 8 + start30i), y: ty(p.y) }));
 
   // 生成器锚点（菱形）
-  if (currentLevel === 'all' || currentLevel === '30min') {
-    g30.vals.forEach((v, i) => {
+  function drawAnchors(g, color) {
+    if (!g || !g.vals) return;
+    g.vals.forEach((v, i) => {
       const px = tx(i), py = ty(v);
-      X.fillStyle = 'rgba(200,140,255,0.9)'; X.strokeStyle = '#fff'; X.lineWidth = 1; X.beginPath();
+      X.fillStyle = color; X.strokeStyle = '#fff'; X.lineWidth = 1; X.beginPath();
       const sz = 4; X.moveTo(px, py - sz); X.lineTo(px + sz*0.7, py); X.lineTo(px, py + sz); X.lineTo(px - sz*0.7, py); X.closePath();
       X.fill(); X.stroke();
-      X.fillStyle = '#c090ff'; X.font = 'bold 8px -apple-system,"Microsoft YaHei",sans-serif'; X.textAlign = 'center';
+      X.fillStyle = color; X.font = 'bold 8px -apple-system,"Microsoft YaHei",sans-serif'; X.textAlign = 'center';
       X.fillText(v.toFixed(2), px, py - sz - 4);
     });
   }
+  if (currentLevel === 'all' || currentLevel === 'weekly') drawAnchors(gW, 'rgba(255,180,0,0.9)');
+  if (currentLevel === 'all' || currentLevel === '30min') drawAnchors(g30, 'rgba(200,140,255,0.9)');
 
   // 标题
+  const lvlNames = { all: '全周期', weekly: '周线', daily: '日线', '30min': '30分钟', '5min': '5分钟' };
   X.fillStyle = '#e0e0e0'; X.font = 'bold 12px -apple-system,"Microsoft YaHei",sans-serif'; X.textAlign = 'center';
-  X.fillText(`${code} ${name} · ${currentLevel === 'all' ? '全周期' : currentLevel === 'daily' ? '日线' : currentLevel === '30min' ? '30分钟' : '5分钟'}`, W / 2, PT - 2);
+  X.fillText(`${code} ${name} · ${lvlNames[currentLevel]}`, W / 2, PT - 2);
 }
 
 // ── 市场状态判断（基于日线拐点）──
 function detectRegime(fD) {
-  // fD: [{i, price, kind}, ...]
+  // fD: [{i, price?:v, kind?:t}, ...] 兼容两种格式
   if (!fD || fD.length < 12) return null;
   const recent = fD.slice(-20);
-  // 计算最近20个拐点的高低范围
-  const prices = recent.map(p => p.price);
+  const prices = recent.map(p => p.price ?? p.v);
+  const kinds = recent.map(p => p.kind ?? p.t);
   const hi = Math.max(...prices), lo = Math.min(...prices);
-  const amp = (hi - lo) / lo; // 振幅比
+  const amp = (hi - lo) / lo;
 
-  // 判断方向：取最后6个拐点看 H-L 序列
-  const last6 = recent.slice(-6);
-  const hhs = last6.filter(p => p.kind === 'H').map(p => p.price);
-  const lls = last6.filter(p => p.kind === 'L').map(p => p.price);
+  const last6kinds = kinds.slice(-6);
+  const last6prices = prices.slice(-6);
+  const hhs = [], lls = [];
+  for (let i = 0; i < last6kinds.length; i++) {
+    if (last6kinds[i] === 'H') hhs.push(last6prices[i]);
+    else lls.push(last6prices[i]);
+  }
   const dirUp = hhs.length >= 2 && lls.length >= 2 &&
     hhs[hhs.length-1] > hhs[0] && lls[lls.length-1] > lls[0];
   const dirDown = hhs.length >= 2 && lls.length >= 2 &&
     hhs[hhs.length-1] < hhs[0] && lls[lls.length-1] < lls[0];
 
-  // 确认"窄"：振幅 < 10%
   const isTight = amp < 0.10;
-
   if (dirDown) return { type: 'bear', label: '🐻 弱势', cls: 'bear' };
   if (dirUp) return { type: 'bull', label: '🐂 强势', cls: 'bull' };
   if (isTight) return { type: 'range', label: '📊 震荡', cls: 'range' };
-  // 振幅大但无明显方向 → 宽幅震荡
   return { type: 'wide', label: '🌊 宽震', cls: 'range' };
 }
 
-function updateInfo(code, name, fD, gD, g30, g5, ptsD, pts30, pts5, sepX) {
+function updateInfo(code, name, fD, gW, gD, g30, g5, ptsW, ptsD, pts30, pts5, sepX, WW, WD, W30, W5, pivots) {
   const el = document.getElementById('info');
   const parts = [];
   // 市场状态第一行
   const regime = detectRegime(fD);
   if (regime) parts.push(`<span class="regime ${regime.cls}">${regime.label}</span>`);
-  if (gD.vals.length >= 3)
+  // 数据来源
+  if (pivots) {
+    parts.push(`<span style="color:#888;font-size:10px">📡 拐点: ${pivots.updated}</span>`);
+  }
+  if (gW && gW.vals.length >= 3)
+    parts.push(`<span class="gen">周线生成器:</span> ${gW.vals.map(v=>v.toFixed(2)).join(' → ')} | 波数=${WW}`);
+  if (gD && gD.vals.length >= 3)
     parts.push(`<span class="gen">日线生成器:</span> ${gD.vals.map(v=>v.toFixed(2)).join(' → ')} | 波数=${WD}`);
-  if (g30.vals.length >= 3)
+  if (g30 && g30.vals.length >= 3)
     parts.push(`<span class="gen">30min生成器:</span> ${g30.vals.map(v=>v.toFixed(2)).join(' → ')} | 波数=${W30}`);
-  if (g5.vals.length >= 3)
+  if (g5 && g5.vals.length >= 3)
     parts.push(`<span class="gen">5min生成器:</span> ${g5.vals.map(v=>v.toFixed(2)).join(' → ')} | 波数=${W5}`);
+  const projW = ptsW.filter(p => p.x > sepX);
+  const projD = ptsD.filter(p => p.x > sepX * 8);
   const proj30 = pts30.filter(p => p.x > sepX);
   const proj5 = pts5.filter(p => p.x > sepX);
+  if (projW.length) {
+    const hi = Math.max(...projW.map(p=>p.y)), lo = Math.min(...projW.map(p=>p.y));
+    parts.push(`<span class="prj">周线投射:</span> 高 ${hi.toFixed(2)} 低 ${lo.toFixed(2)}`);
+  }
+  if (projD.length) {
+    const hi = Math.max(...projD.map(p=>p.y)), lo = Math.min(...projD.map(p=>p.y));
+    parts.push(`<span class="prj">日线投射:</span> 高 ${hi.toFixed(2)} 低 ${lo.toFixed(2)}`);
+  }
   if (proj30.length) {
     const hi = Math.max(...proj30.map(p=>p.y)), lo = Math.min(...proj30.map(p=>p.y));
     parts.push(`<span class="prj">30min投射:</span> 高 ${hi.toFixed(2)} 低 ${lo.toFixed(2)}`);
