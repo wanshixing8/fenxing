@@ -266,13 +266,18 @@ async function fetchKline(code, period, count) {
 
   // ── L3: 腾讯API（320根兜底）──
   const tc = tencentCode(code);
-  const url = `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${tc},${period},,${count}`;
+  const isDay = period === 'day' || period === 'daily';
+  // 日线/周线走 fqkline（前复权），分钟线走 mkline
+  const apiPeriod = isDay ? 'qfqday' : period;
+  const url = isDay
+    ? `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${tc},day,,,${count},qfq`
+    : `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${tc},${period},,${count}`;
   let rows;
   try {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
-    rows = data.data?.[tc]?.[period];
+    rows = data.data?.[tc]?.[apiPeriod];
   } catch(e) {
     // ── L3b: 同源查询代理（fetch /?proxy=... , Python端抓腾讯API）──
     console.warn('腾讯直连失败，走同源查询代理', e.message);
@@ -291,9 +296,15 @@ async function fetchKline(code, period, count) {
   if (!rows || !rows.length) throw new Error('无K线数据');
   const bars = rows.map(r => {
     let dt;
-    if (period === 'day' || period === 'daily') {
+    if (isDay) {
+      // fqkline 返回: ["2025-04-01","8.440","8.510","8.570","8.420","249368.000"]
       const s = r[0];
-      dt = new Date(+s.slice(0,4), +s.slice(4,6) - 1, +s.slice(6,8));
+      if (s.includes('-')) {
+        const parts = s.split('-');
+        dt = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+      } else {
+        dt = new Date(+s.slice(0,4), +s.slice(4,6) - 1, +s.slice(6,8));
+      }
     } else {
       const s = r[0];
       dt = new Date(+s.slice(0,4), +s.slice(4,6) - 1, +s.slice(6,8), +s.slice(8,10), +s.slice(10,12));
