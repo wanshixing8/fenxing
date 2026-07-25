@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f0f1a">
+<title>分形监控</title>
+<meta name="description" content="A股分形结构投射监控 — 纯前端PWA">
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22%E5%88%86%E5%BD%A2%E7%9B%91%E6%8E%A7%22%2C%22short_name%22%3A%22%E5%88%86%E5%BD%A2%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230f0f1a%22%2C%22theme_color%22%3A%22%230f0f1a%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%253D'http%253A%2F%2Fwww.w3.org%2F2000%2Fsvg'%2520viewBox%253D'0%25200%2520100%2520100'%253E%253Crect%2520width%253D'100'%2520height%253D'100'%2520rx%253D'20'%2520fill%253D'%25231a1a2e'%2F%253E%253Ctext%2520x%253D'50'%2520y%253D'65'%2520text-anchor%253D'middle'%2520font-size%253D'50'%2520fill%253D'%2523ffd700'%253E%E2%8C%82%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22100x100%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,'Microsoft YaHei',sans-serif;background:#0f0f1a;color:#ccc;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+#bar{display:flex;align-items:center;gap:5px;padding:6px 8px;background:#1a1a2e;border-bottom:1px solid #333;z-index:10;flex-shrink:0}
+#bar input{flex:1;background:#16213e;color:#fff;border:1px solid #555;border-radius:6px;padding:8px 8px;font-size:15px;min-width:0;outline:none}
+#bar input:focus{border-color:#ffd700}
+#bar button{background:#2a2a5a;color:#fff;border:1px solid #555;border-radius:6px;padding:8px 10px;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0}
+#bar button:active{background:#3a3a7a}
+#bar .lv{background:#1a1a3a;color:#aaa;font-size:11px;padding:5px 6px;border-radius:4px;min-width:32px;text-align:center}
+#bar .lv.on{background:#3a3a2a;color:#ffd700;border-color:#ffd700;font-weight:bold}
+#status{text-align:center;font-size:11px;padding:3px 8px;color:#888;min-height:18px;flex-shrink:0;line-height:18px}
+#stale-warn{text-align:center;font-size:10px;padding:2px 8px;color:#ff8c00;min-height:16px;flex-shrink:0;line-height:16px;cursor:pointer;display:none}
+#stale-warn.show{display:block}
+#chart-wrap{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;display:flex;align-items:flex-start;justify-content:center;min-height:0}
+canvas{display:block;max-width:100%;height:auto}
+#info{font-size:10px;background:#1a1a2e;border-top:1px solid #333;line-height:1.6;flex-shrink:0;padding:6px 8px;max-height:30vh;overflow-y:auto}
+#info .gen{color:#4cc9f0}
+#info .res{color:#ffd700}
+#info .prj{color:#ff8c00}
+#toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;padding:8px 16px;border-radius:20px;font-size:13px;z-index:99;pointer-events:none;opacity:0;transition:opacity .3s}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="bar">
+  <input id="code" type="text" placeholder="输入代码" value="601238" inputmode="numeric" maxlength="6">
+  <button id="go">▶</button>
+  <button class="lv on" data-lv="all">All</button>
+  <button class="lv" data-lv="daily">日</button>
+  <button class="lv" data-lv="30min">30</button>
+  <button class="lv" data-lv="5min">5</button>
+  <button id="btnRefresh" style="background:#1a1a2a;border:1px dashed #555;border-radius:6px;padding:6px 8px;font-size:11px;color:#888;cursor:pointer;flex-shrink:0" onclick="toggleRefresh()" title="自动刷新（60秒）">⏱</button>
+</div>
+<div id="status">输入6位代码，点击 ▶ 或回车</div>
+<div id="stale-warn" onclick="this.remove()"></div>
+<div id="chart-wrap"><canvas id="c"></canvas></div>
+<div id="info"></div>
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  分形监控 v2 — 独立PWA，纯前端，数据全从腾讯直拉
+//  部署到任意静态托管（GitHub Pages/手机本地HTTP）
+//  然后「添加到主屏幕」即独立App
+// ═══════════════════════════════════════════════════
+
+const C = document.getElementById('c');
+const X = C.getContext('2d');
+let currentLevel = 'all';
+let WD = 0, W30 = 0, W5 = 0;  // for draw closure
+
+// ── Toast ──
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ── UI ──
+document.querySelectorAll('.lv').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.lv').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    currentLevel = b.dataset.lv;
+    run();
+  });
+});
+document.getElementById('go').addEventListener('click', run);
+document.getElementById('code').addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+
+function tencentCode(code) {
+  code = code.trim();
+  return (code.startsWith('6') ? 'sh' : 'sz') + code;
+}
+
+// ═══════════════════════════════════════════════════
+//  IndexedDB 离线缓存 — 手机一次WiFi同步，蜂窝永久全量
+// ═══════════════════════════════════════════════════
+const DB_NAME = 'fractal_cache', DB_VER = 1;
+function openDB() {
+  return new Promise((ok, fail) => {
+    const r = indexedDB.open(DB_NAME, DB_VER);
+    r.onupgradeneeded = () => { r.result.createObjectStore('kline'); };
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => fail(r.error);
+  });
+}
+async function cacheGet(code, period) {
+  try {
+    checkStaleData(code);  // 稳私检测，不阻塞主流程
+    const db = await openDB();
+    return new Promise((ok) => {
+      const t = db.transaction('kline','readonly');
+      const req = t.objectStore('kline').get(`${code}_${period}`);
+      req.onsuccess = () => ok(req.result);
+      req.onerror = () => ok(null);
+    });
+  } catch { return null; }
+}
+async function cachePut(code, period, bars, name) {
+  try {
+    checkStaleData(code);  // 稳私检测，不阻塞主流程
+    const db = await openDB();
+    return new Promise((ok) => {
+      const t = db.transaction('kline','readwrite');
+      t.objectStore('kline').put({bars, name, ts: Date.now()}, `${code}_${period}`);
+      t.oncomplete = () => ok();
+    });
+  } catch {}
+}
+async function cacheLastUpdate(code, period) {
+  const entry = await cacheGet(code, period);
+  return entry ? entry.ts : 0;
+}
+// 缓存过期时间：5min数据1天，日线数据3天
+function cacheAge(code, period) {
+  if (period === 'day' || period === 'daily') return 3 * 86400000;
+  return 86400000; // 1天
+}
+
+// ═══════════════════════════════════════════════════
+// 数据拉取 — 三级源：serve.py全量 > 腾讯API > IndexedDB缓存
+// ═══════════════════════════════════════════════════
+const ON_SERVE = (() => {
+  const h = location.hostname;
+  return h && h !== 'localhost' && !h.includes('github.io') && !h.includes('loca.lt') && !h.includes('127.0.0.1');
+})();
+const BASE = ON_SERVE ? '' : '';
+
+// ── 稳私提示：拐点JSON缺失/过旧时警告 ──
+const DEPLOY_BASE = '';  // 设为 'https://xxx.github.io/fractal-app/deploy' 部署后改
+const STALE_DAYS = 5;
+function showWarn(msg) {
+  const w = document.getElementById('stale-warn');
+  w.textContent = msg;
+  w.classList.add('show');
+}
+async function checkStaleData(code) {
+  if (!DEPLOY_BASE) return;
+  try {
+    const resp = await fetch(`${DEPLOY_BASE}/pivots_${code}.json`);
+    if (!resp.ok) {
+      // 404 = 该标的不在推送范围内
+      if (resp.status === 404) {
+        showWarn('⚠️ 该标的不在推送范围，数据可能不全（点击关闭）');
+      }
+      return;
+    }
+    const piv = await resp.json();
+    if (!piv.updated) return;
+    const age = (Date.now() - new Date(piv.updated).getTime()) / 86400000;
+    if (age > STALE_DAYS) {
+      showWarn(`⚠️ 数据最后更新于 ${piv.updated}，可能不全。连本地WiFi可同步全量。（点击关闭）`);
+    }
+  } catch {}
+}
+
+async function fetchKline(code, period, count) {
+  // ── L1: serve.py 全量数据（仅WiFi下可用）──
+  if (ON_SERVE && period === 'm5') {
+    try {
+    checkStaleData(code);  // 稳私检测，不阻塞主流程
+      const resp = await fetch(`/api/history?code=${code}`);
+      const raw = await resp.json();
+      if (raw.ok && raw.bars && raw.bars.length > 1000) {
+        const bars = raw.bars.map(r => ({
+          dt: new Date(r.dt.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')),
+          o: r.o, c: r.c, h: r.h, l: r.l, vol: r.vol
+        }));
+        console.log(`📡 serve.py 5min: ${bars.length}根 → 缓存`);
+        cachePut(code, 'm5', bars, code).catch(()=>{});
+        return bars;
+      }
+    } catch(e) { console.warn('serve.py 5min不可用', e); }
+  }
+  if (ON_SERVE && (period === 'day' || period === 'daily')) {
+    try {
+    checkStaleData(code);  // 稳私检测，不阻塞主流程
+      const resp = await fetch(`/api/history_daily?code=${code}`);
+      const raw = await resp.json();
+      if (raw.ok && raw.bars && raw.bars.length > 500) {
+        const bars = raw.bars.map(r => ({
+          dt: new Date(r.dt.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')),
+          o: r.o, c: r.c, h: r.h, l: r.l, vol: r.vol
+        }));
+        console.log(`📡 serve.py 日线: ${bars.length}根 → 缓存`);
+        cachePut(code, period, bars, code).catch(()=>{});
+        return bars;
+      }
+    } catch(e) { console.warn('serve.py 日线不可用', e); }
+  }
+
+  // ── L2: IndexedDB 缓存（离线/蜂窝下首选）──
+  const cached = await cacheGet(code, period);
+  if (cached && cached.bars && cached.bars.length > 300) {
+    const age = Date.now() - (cached.ts || 0);
+    if (age < cacheAge(code, period)) {
+      console.log(`💾 缓存 ${period}: ${cached.bars.length}根 (${Math.round(age/3600000)}h前)`);
+      return cached.bars;
+    }
+  }
+
+  // ── L3: 腾讯API（320根兜底）──
+  const tc = tencentCode(code);
+  const url = `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${tc},${period},,${count}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data = await resp.json();
+  const rows = data.data?.[tc]?.[period];
+  if (!rows || !rows.length) throw new Error('无K线数据');
+  const bars = rows.map(r => {
+    let dt;
+    if (period === 'day' || period === 'daily') {
+      const s = r[0];
+      dt = new Date(+s.slice(0,4), +s.slice(4,6) - 1, +s.slice(6,8));
+    } else {
+      const s = r[0];
+      dt = new Date(+s.slice(0,4), +s.slice(4,6) - 1, +s.slice(6,8), +s.slice(8,10), +s.slice(10,12));
+    }
+    return { dt, o: +r[1], c: +r[2], h: +r[3], l: +r[4], vol: (+r[5]||0) * 100 };
+  });
+  // 腾讯数据也缓存（减少重复请求）
+  cachePut(code, period, bars, code).catch(()=>{});
+  return bars;
+}
+
+async function fetchName(code) {
+  const tc = tencentCode(code);
+  const url = `https://qt.gtimg.cn/q=${tc}`;
+  const resp = await fetch(url);
+  const text = await resp.text();
+  const m = text.match(/~([^~]+)/);
+  return m ? m[1] : code;
+}
+
+// ── 分形检测 ──
+function findFractals(highs, lows, wnd = 5) {
+  const n = highs.length;
+  const ph = [], pl = [];
+  for (let i = wnd; i < n - wnd; i++) {
+    const lh = highs.slice(i - wnd, i), rh = highs.slice(i + 1, i + 1 + wnd);
+    const ll = lows.slice(i - wnd, i),  rl = lows.slice(i + 1, i + 1 + wnd);
+    const hMax = Math.max(...lh, ...rh), lMin = Math.min(...ll, ...rl);
+    if (highs[i] > hMax) ph.push({ i, v: highs[i], t: 'H' });
+    if (lows[i] < lMin) pl.push({ i, v: lows[i], t: 'L' });
+  }
+  const all = [...ph, ...pl].sort((a, b) => a.i - b.i);
+  const result = [];
+  for (const p of all) {
+    if (!result.length) { result.push(p); continue; }
+    const last = result[result.length - 1];
+    if (last.t === p.t) {
+      if ((p.t === 'H' && p.v > last.v) || (p.t === 'L' && p.v < last.v))
+        result[result.length - 1] = p;
+    } else {
+      result.push(p);
+    }
+  }
+  return result;
+}
+
+function group30min(bars5) {
+  const m30 = [];
+  for (let i = 0; i < bars5.length; i += 6) {
+    const g = bars5.slice(i, i + 6);
+    if (g.length < 3) break;
+    m30.push({
+      dt: g[0].dt, o: g[0].o,
+      h: Math.max(...g.map(b => b.h)),
+      l: Math.min(...g.map(b => b.l)),
+      c: g[g.length - 1].c,
+      vol: g.reduce((s, b) => s + b.vol, 0)
+    });
+  }
+  return m30;
+}
+
+function makeGenerator(fractals, maxPts = 6) {
+  if (fractals.length < 3) return { vals: [], types: [] };
+  const vals = [], types = [];
+  for (let i = fractals.length - 1; i >= 0 && vals.length < maxPts; i--) {
+    if (!vals.length || fractals[i].t !== types[types.length - 1]) {
+      vals.unshift(fractals[i].v);
+      types.unshift(fractals[i].t);
+    }
+  }
+  return { vals, types };
+}
+
+function computeDecays(vals) {
+  const decays = [];
+  for (let i = 1; i < vals.length - 1; i++) {
+    const a1 = Math.abs(vals[i] - vals[i-1]);
+    const a2 = Math.abs(vals[i+1] - vals[i]);
+    decays.push(a1 > 0.001 ? Math.min(0.95, Math.max(0.3, a2 / a1)) : 0.618);
+  }
+  return decays;
+}
+
+function envelopeAt(phase) {
+  if (phase >= 1) return 0.015;
+  const er = 1/3;
+  if (phase < er) { const t = phase / er; return 0.2 + 0.8 * t; }
+  const t = (phase - er) / (1 - er);
+  return Math.max(0.015, 1 - 0.985 * t);
+}
+
+function project(ys, decays, lastIsHigh, totalWaves, levelScale = 1, parentEnv = null, startX = 0, step = 1) {
+  const pat = [];
+  for (let i = 0; i < ys.length - 1; i++) pat.push(ys[i+1] - ys[i]);
+  const pts = ys.map((y, i) => ({ x: startX + i * step, y }));
+  let cx = pts[pts.length - 1].x, cy = pts[pts.length - 1].y;
+  let needFlip = lastIsHigh !== (pat[0] < 0);
+  for (let k = 0; k < totalWaves; k++) {
+    const phase = totalWaves > 1 ? k / (totalWaves - 1) : 0;
+    let env = envelopeAt(phase) * levelScale;
+    if (parentEnv) env *= parentEnv(phase);
+    let cum = env;
+    for (let si = 0; si < pat.length; si++) {
+      if (si > 0 && si - 1 < decays.length) cum *= decays[si - 1];
+      cx += step; cy += pat[si] * cum * (needFlip ? -1 : 1);
+      pts.push({ x: cx, y: cy });
+    }
+    needFlip = !needFlip;
+  }
+  return pts;
+}
+
+// ── 主流程 ──
+async function run() {
+  const code = document.getElementById('code').value.trim();
+  if (!code || code.length !== 6 || isNaN(code)) { toast('请输入6位数字代码'); return; }
+  const st = document.getElementById('status');
+  st.textContent = '⏳ 拉取数据...';
+  st.style.color = '#888';
+
+  try {
+    checkStaleData(code);  // 稳私检测，不阻塞主流程
+    const [name, rows5, rowsD] = await Promise.all([
+      fetchName(code),
+      fetchKline(code, 'm5', 320),
+      fetchKline(code, 'day', 2000)
+    ]);
+    st.textContent = `📊 ${code} ${name}`;
+    st.style.color = '#ffd700';
+
+    const bars5 = rows5.map(r => ({ ...r, c: Math.round(r.c * 100) / 100 }));
+    const m30 = group30min(bars5);
+    const daily = rowsD.map(r => ({ ...r, c: Math.round(r.c * 100) / 100 }));
+
+    const h30 = m30.map(b => b.h), l30 = m30.map(b => b.l);
+    const f30 = findFractals(h30, l30, 5);
+    const hD = daily.map(b => b.h), lD = daily.map(b => b.l);
+    const fD = findFractals(hD, lD, 2);
+
+    const g30 = makeGenerator(f30, 6);
+    const gD = makeGenerator(fD, 4);
+    const decays30 = computeDecays(g30.vals);
+    const decaysD = computeDecays(gD.vals);
+
+    const h5 = bars5.map(b => b.h), l5 = bars5.map(b => b.l);
+    const f5all = findFractals(h5, l5, 3);
+    let last30i = f30.length ? f30[f30.length - 1].i : 0;
+    let last30dt = m30[last30i] ? m30[last30i].dt : bars5[0].dt;
+    let start5 = bars5.findIndex(b => b.dt >= last30dt);
+    if (start5 < 0) start5 = 0;
+    const f5recent = f5all.filter(f => f.i >= start5);
+    const g5 = makeGenerator(f5recent, 8);
+    const decays5 = computeDecays(g5.vals);
+
+    WD = 3 + Math.max(0, gD.vals.length - 3);
+    W30 = 4 + Math.max(0, g30.vals.length - 4);
+    W5 = 8 + Math.max(0, g5.vals.length - 6) * 2;
+
+    const parentD = (ph) => envelopeAt(ph);
+    const parent30 = (ph) => envelopeAt(ph) * parentD(ph);
+
+    const ptsD = gD.vals.length >= 3
+      ? project(gD.vals, decaysD, gD.types[gD.types.length-1] === 'H', WD, 1.8, null, 0, 8)
+      : [];
+    const pts30 = g30.vals.length >= 3
+      ? project(g30.vals, decays30, g30.types[g30.types.length-1] === 'H', W30, 1.0, parentD, 0, 1)
+      : [];
+    const sx5 = g30.vals.length - 1;
+    const pts5 = g5.vals.length >= 3
+      ? project(g5.vals, decays5, g5.types[g5.types.length-1] === 'H', W5, 0.35, parent30, sx5, 1/6)
+      : [];
+
+    draw(code, name, m30, gD, g30, g5, ptsD, pts30, pts5, sx5, f30, last30i);
+    updateInfo(code, name, gD, g30, g5, ptsD, pts30, pts5, sx5);
+
+    toast(`✅ ${code} ${name} 分析完成`);
+  } catch (e) {
+    st.textContent = '❌ ' + e.message;
+    st.style.color = '#ff4444';
+    toast('❌ ' + e.message);
+    console.error(e);
+  }
+}
+
+function draw(code, name, m30, gD, g30, g5, ptsD, pts30, pts5, sepX, f30, last30i) {
+  const W = Math.min(1100, window.innerWidth - 4);
+  const H = Math.min(650, window.innerHeight * 0.62);
+  C.width = W; C.height = H;
+  const PL = 48, PR = 8, PT = 18, PB = 32;
+
+  const start30i = Math.max(0, last30i - 10);
+  const viewM30 = m30.slice(start30i);
+  let allY = [...viewM30.flatMap(b => [b.h, b.l])];
+  if (pts30.length) allY = allY.concat(pts30.map(p => p.y));
+  if (pts5.length) allY = allY.concat(pts5.map(p => p.y));
+  if (ptsD.length) allY = allY.concat(ptsD.map(p => p.y));
+  if (!allY.length) allY = [0, 100];
+  let ym = Math.min(...allY), yM = Math.max(...allY);
+  const pad = Math.max((yM - ym) * 0.1, 0.5);
+  ym -= pad; yM += pad;
+
+  const totalX = viewM30.length + sepX + Math.max(WD*0.6, W30*0.6, W5*0.6);
+  const tx = v => PL + (v / totalX) * (W - PL - PR);
+  const ty = v => PT + (yM - v) / (yM - ym) * (H - PT - PB);
+
+  X.fillStyle = '#16213e'; X.fillRect(0, 0, W, H);
+
+  // Grid
+  X.strokeStyle = 'rgba(255,255,255,0.04)'; X.lineWidth = 0.5;
+  for (let y = ym; y <= yM; y += (yM - ym) / 8)
+    X.stroke(new Path2D(`M${PL},${ty(y)} L${W-PR},${ty(y)}`));
+
+  // Price labels
+  X.fillStyle = '#888'; X.font = '9px -apple-system,"Microsoft YaHei",sans-serif'; X.textAlign = 'right';
+  for (let y = ym; y <= yM; y += (yM - ym) / 4)
+    X.fillText(y.toFixed(2), PL - 3, ty(y) + 3);
+
+  // K线
+  viewM30.forEach((b, i) => {
+    const px = tx(i), bw = Math.max(2, (W-PL-PR) / viewM30.length * 0.55);
+    const col = b.c >= b.o ? '#22aa44' : '#dd3333';
+    X.strokeStyle = col; X.lineWidth = 1;
+    X.stroke(new Path2D(`M${px},${ty(b.h)} L${px},${ty(b.l)}`));
+    X.fillStyle = col;
+    X.fillRect(px - bw/2, ty(Math.max(b.o, b.c)), bw, Math.max(1, Math.abs(ty(b.o) - ty(b.c))));
+  });
+
+  // 分隔线
+  const sx = tx(viewM30.length);
+  X.strokeStyle = 'rgba(255,255,255,0.25)'; X.lineWidth = 1; X.setLineDash([4, 4]);
+  X.stroke(new Path2D(`M${sx},${PT} L${sx},${H-PB}`)); X.setLineDash([]);
+  X.fillStyle = '#777'; X.font = '9px -apple-system,"Microsoft YaHei",sans-serif';
+  X.textAlign = 'left'; X.fillText('← 历史', sx - 40, H - PB + 12);
+  X.fillText('投射 →', sx + 4, H - PB + 12);
+
+  // 投射
+  function drawLine(pts, color, width, transform) {
+    if (!pts || !pts.length) return;
+    X.strokeStyle = color; X.lineWidth = width; X.setLineDash([]); X.beginPath();
+    pts.forEach((p, i) => { const {x: px, y: py} = transform(p); i === 0 ? X.moveTo(px, py) : X.lineTo(px, py); });
+    X.stroke();
+  }
+
+  if (currentLevel === 'all' || currentLevel === '30min')
+    drawLine(pts30, 'rgba(200,140,255,0.7)', 2.5, p => ({ x: tx(p.x + start30i), y: ty(p.y) }));
+  if (currentLevel === 'all' || currentLevel === '5min')
+    drawLine(pts5, '#4cc9f0', 2, p => ({ x: tx(p.x + start30i), y: ty(p.y) }));
+  if ((currentLevel === 'all' || currentLevel === 'daily') && ptsD.length)
+    drawLine(ptsD, 'rgba(255,200,0,0.6)', 2, p => ({ x: tx(p.x / 8 + start30i), y: ty(p.y) }));
+
+  // 生成器锚点（菱形）
+  if (currentLevel === 'all' || currentLevel === '30min') {
+    g30.vals.forEach((v, i) => {
+      const px = tx(i), py = ty(v);
+      X.fillStyle = 'rgba(200,140,255,0.9)'; X.strokeStyle = '#fff'; X.lineWidth = 1; X.beginPath();
+      const sz = 4; X.moveTo(px, py - sz); X.lineTo(px + sz*0.7, py); X.lineTo(px, py + sz); X.lineTo(px - sz*0.7, py); X.closePath();
+      X.fill(); X.stroke();
+      X.fillStyle = '#c090ff'; X.font = 'bold 8px -apple-system,"Microsoft YaHei",sans-serif'; X.textAlign = 'center';
+      X.fillText(v.toFixed(2), px, py - sz - 4);
+    });
+  }
+
+  // 标题
+  X.fillStyle = '#e0e0e0'; X.font = 'bold 12px -apple-system,"Microsoft YaHei",sans-serif'; X.textAlign = 'center';
+  X.fillText(`${code} ${name} · ${currentLevel === 'all' ? '全周期' : currentLevel === 'daily' ? '日线' : currentLevel === '30min' ? '30分钟' : '5分钟'}`, W / 2, PT - 2);
+}
+
+function updateInfo(code, name, gD, g30, g5, ptsD, pts30, pts5, sepX) {
+  const el = document.getElementById('info');
+  const parts = [];
+  if (gD.vals.length >= 3)
+    parts.push(`<span class="gen">日线生成器:</span> ${gD.vals.map(v=>v.toFixed(2)).join(' → ')} | 波数=${WD}`);
+  if (g30.vals.length >= 3)
+    parts.push(`<span class="gen">30min生成器:</span> ${g30.vals.map(v=>v.toFixed(2)).join(' → ')} | 波数=${W30}`);
+  if (g5.vals.length >= 3)
+    parts.push(`<span class="gen">5min生成器:</span> ${g5.vals.map(v=>v.toFixed(2)).join(' → ')} | 波数=${W5}`);
+  const proj30 = pts30.filter(p => p.x > sepX);
+  const proj5 = pts5.filter(p => p.x > sepX);
+  if (proj30.length) {
+    const hi = Math.max(...proj30.map(p=>p.y)), lo = Math.min(...proj30.map(p=>p.y));
+    parts.push(`<span class="prj">30min投射:</span> 高 ${hi.toFixed(2)} 低 ${lo.toFixed(2)}`);
+  }
+  if (proj5.length) {
+    const hi = Math.max(...proj5.map(p=>p.y)), lo = Math.min(...proj5.map(p=>p.y));
+    parts.push(`<span class="prj">5min投射:</span> 高 ${hi.toFixed(2)} 低 ${lo.toFixed(2)}`);
+  }
+  el.innerHTML = parts.join('<br>');
+}
+
+// ── Service Worker (PWA 离线缓存) ──
+if ('serviceWorker' in navigator) {
+  const swCode = `
+const CACHE = 'fractal-v2';
+self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
+self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', e => {
+  e.respondWith(
+    caches.match(e.request).then(r => r || fetch(e.request).then(resp => {
+      if (resp.ok) { const clone = resp.clone(); caches.open(CACHE).then(c => c.put(e.request, clone)); }
+      return resp;
+    }))
+  );
+});`;
+  const blob = new Blob([swCode], { type: 'application/javascript' });
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+}
+
+// ── 启动 ──
+run();
+
+// ── 自动刷新 ──
+let refreshTimer = null, refreshOn = false;
+function toggleRefresh() {
+  const btn = document.getElementById('btnRefresh');
+  refreshOn = !refreshOn;
+  if (refreshOn) {
+    btn.style.color = '#ffd700';
+    btn.style.borderColor = '#ffd700';
+    btn.style.background = '#3a3a2a';
+    btn.textContent = '⏱60s';
+    refreshTimer = setInterval(run, 60000);
+  } else {
+    btn.style.color = '#888';
+    btn.style.borderColor = '#555';
+    btn.style.background = '#1a1a2a';
+    btn.textContent = '⏱';
+    clearInterval(refreshTimer);
+  }
+}
+</script>
+</body>
+</html>
