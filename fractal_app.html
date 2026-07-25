@@ -251,10 +251,25 @@ async function fetchKline(code, period, count) {
   // ── L3: 腾讯API（320根兜底）──
   const tc = tencentCode(code);
   const url = `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${tc},${period},,${count}`;
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const data = await resp.json();
-  const rows = data.data?.[tc]?.[period];
+  let rows;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    rows = data.data?.[tc]?.[period];
+  } catch(e) {
+    // ── L3b: CORS被拦？走Streamlit代理 ──
+    console.warn('腾讯直连失败，走Streamlit代理', e.message);
+    try {
+      const proxyUrl = `https://fenxing-epepqv7dy4odxxx9pnwm57.streamlit.app/api/kline?code=${tc}&period=${period}&count=${count}`;
+      const resp2 = await fetch(proxyUrl);
+      if (!resp2.ok) throw new Error(`Proxy HTTP ${resp2.status}`);
+      const data2 = await resp2.json();
+      rows = data2.data?.[tc]?.[period];
+    } catch(e2) {
+      console.warn('Streamlit代理也失败', e2.message);
+    }
+  }
   if (!rows || !rows.length) throw new Error('无K线数据');
   const bars = rows.map(r => {
     let dt;
@@ -274,11 +289,23 @@ async function fetchKline(code, period, count) {
 
 async function fetchName(code) {
   const tc = tencentCode(code);
-  const url = `https://qt.gtimg.cn/q=${tc}`;
-  const resp = await fetch(url);
-  const text = await resp.text();
-  const m = text.match(/~([^~]+)/);
-  return m ? m[1] : code;
+  try {
+    const resp = await fetch(`https://qt.gtimg.cn/q=${tc}`);
+    if (resp.ok) {
+      const text = await resp.text();
+      const m = text.match(/~([^~]+)/);
+      if (m) return m[1];
+    }
+  } catch(e) {}
+  // 兜底：走Streamlit代理
+  try {
+    const resp2 = await fetch(`https://fenxing-epepqv7dy4odxxx9pnwm57.streamlit.app/api/name?code=${tc}`);
+    if (resp2.ok) {
+      const data = await resp2.json();
+      if (data.name) return data.name;
+    }
+  } catch(e2) {}
+  return code; // 最终兜底：返回代码本身
 }
 
 // ── 分形检测 ──
