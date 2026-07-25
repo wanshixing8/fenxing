@@ -34,6 +34,8 @@ canvas{display:block;max-width:100%;height:auto}
 #info .range{color:#ff9800}
 #toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;padding:8px 16px;border-radius:20px;font-size:13px;z-index:99;pointer-events:none;opacity:0;transition:opacity .3s}
 #toast.show{opacity:1}
+#risk-warn{text-align:center;font-size:9px;padding:4px 8px;color:#f44336;background:rgba(244,67,54,0.08);min-height:14px;flex-shrink:0;line-height:1.4;border-bottom:1px solid rgba(244,67,54,0.2)}
+#footer{text-align:center;font-size:9px;padding:4px 8px;color:#555;flex-shrink:0;line-height:14px;border-top:1px solid #222}
 </style>
 </head>
 <body>
@@ -48,9 +50,11 @@ canvas{display:block;max-width:100%;height:auto}
   <button id="btnSync" style="background:#1a1a2a;border:1px solid #444;border-radius:6px;padding:6px 8px;font-size:13px;cursor:pointer;flex-shrink:0;display:none" onclick="syncPivots()" title="从GitHub拉取最新拐点数据">🔄</button>
 </div>
 <div id="status">输入6位代码，点击 ▶ 或回车</div>
+<div id="risk-warn">⚠️ 没有高手，没有万能药，盈亏在心，所有预测都是欺骗；软件只是换个角度看市场，改变不了贪嗔痴和盈亏；市场无敌，熊市最好的方法是不操作，永不亏钱的方法是不碰股票；【仅限内部交流，转发分享违法，切记！】</div>
 <div id="stale-warn" onclick="this.remove()"></div>
 <div id="chart-wrap"><canvas id="c"></canvas></div>
 <div id="info"></div>
+<div id="footer">分形监控 v4 · © wsx · 内部交流 禁止转发</div>
 <div id="toast"></div>
 
 <script>
