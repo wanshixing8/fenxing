@@ -28,6 +28,10 @@ canvas{display:block;max-width:100%;height:auto}
 #info .gen{color:#4cc9f0}
 #info .res{color:#ffd700}
 #info .prj{color:#ff8c00}
+#info .regime{font-weight:bold;font-size:11px}
+#info .bull{color:#4caf50}
+#info .bear{color:#f44336}
+#info .range{color:#ff9800}
 #toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;padding:8px 16px;border-radius:20px;font-size:13px;z-index:99;pointer-events:none;opacity:0;transition:opacity .3s}
 #toast.show{opacity:1}
 </style>
@@ -400,7 +404,7 @@ async function run() {
       : [];
 
     draw(code, name, m30, gD, g30, g5, ptsD, pts30, pts5, sx5, f30, last30i);
-    updateInfo(code, name, gD, g30, g5, ptsD, pts30, pts5, sx5);
+    updateInfo(code, name, fD, gD, g30, g5, ptsD, pts30, pts5, sx5);
 
     toast(`✅ ${code} ${name} 分析完成`);
   } catch (e) {
@@ -494,9 +498,41 @@ function draw(code, name, m30, gD, g30, g5, ptsD, pts30, pts5, sepX, f30, last30
   X.fillText(`${code} ${name} · ${currentLevel === 'all' ? '全周期' : currentLevel === 'daily' ? '日线' : currentLevel === '30min' ? '30分钟' : '5分钟'}`, W / 2, PT - 2);
 }
 
-function updateInfo(code, name, gD, g30, g5, ptsD, pts30, pts5, sepX) {
+// ── 市场状态判断（基于日线拐点）──
+function detectRegime(fD) {
+  // fD: [{i, price, kind}, ...]
+  if (!fD || fD.length < 12) return null;
+  const recent = fD.slice(-20);
+  // 计算最近20个拐点的高低范围
+  const prices = recent.map(p => p.price);
+  const hi = Math.max(...prices), lo = Math.min(...prices);
+  const amp = (hi - lo) / lo; // 振幅比
+
+  // 判断方向：取最后6个拐点看 H-L 序列
+  const last6 = recent.slice(-6);
+  const hhs = last6.filter(p => p.kind === 'H').map(p => p.price);
+  const lls = last6.filter(p => p.kind === 'L').map(p => p.price);
+  const dirUp = hhs.length >= 2 && lls.length >= 2 &&
+    hhs[hhs.length-1] > hhs[0] && lls[lls.length-1] > lls[0];
+  const dirDown = hhs.length >= 2 && lls.length >= 2 &&
+    hhs[hhs.length-1] < hhs[0] && lls[lls.length-1] < lls[0];
+
+  // 确认"窄"：振幅 < 10%
+  const isTight = amp < 0.10;
+
+  if (dirDown) return { type: 'bear', label: '🐻 弱势', cls: 'bear' };
+  if (dirUp) return { type: 'bull', label: '🐂 强势', cls: 'bull' };
+  if (isTight) return { type: 'range', label: '📊 震荡', cls: 'range' };
+  // 振幅大但无明显方向 → 宽幅震荡
+  return { type: 'wide', label: '🌊 宽震', cls: 'range' };
+}
+
+function updateInfo(code, name, fD, gD, g30, g5, ptsD, pts30, pts5, sepX) {
   const el = document.getElementById('info');
   const parts = [];
+  // 市场状态第一行
+  const regime = detectRegime(fD);
+  if (regime) parts.push(`<span class="regime ${regime.cls}">${regime.label}</span>`);
   if (gD.vals.length >= 3)
     parts.push(`<span class="gen">日线生成器:</span> ${gD.vals.map(v=>v.toFixed(2)).join(' → ')} | 波数=${WD}`);
   if (g30.vals.length >= 3)
@@ -557,5 +593,12 @@ function toggleRefresh() {
   }
 }
 </script>
+
+<!-- ── Cloudflare Web Analytics（免费、无Cookie、隐私友好）──
+     注册 https://dash.cloudflare.com/sign-up → Web Analytics → 添加站点
+     把下面 src 里的 token 换成自己的即可 -->
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js"
+  data-cf-beacon='{"token": "YOUR_CLOUDFLARE_TOKEN_HERE"}'></script>
+
 </body>
 </html>

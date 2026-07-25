@@ -520,6 +520,7 @@ goto :block_scan
 :deploy_pivots
 cls
 set "PUB_SCRIPT=%WORKDIR%\publish_pivots.py"
+set "LR_SCRIPT=%WORKDIR%\long_rank.py"
 set "DEPLOY_DIR=%WORKDIR%\deploy"
 echo.
 echo   +------------------------------------------+
