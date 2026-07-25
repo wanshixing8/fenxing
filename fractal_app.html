@@ -317,7 +317,7 @@ async function fetchName(code) {
   } catch(e) {}
   // 兜底：同源查询代理
   try {
-    const result = await queryProxy(tc + '__name');
+    const result = await queryProxy(tc + ',__name');
     if (result && result.name) return result.name;
   } catch(e2) {}
   return code;

@@ -20,9 +20,9 @@ if "proxy" in params:
     resp_data = {"ok": False, "error": "unknown"}
 
     try:
-        if parts[0].endswith("__name"):
-            # 股票名称查询
-            tc = parts[0].replace("__name", "")
+        if len(parts) >= 2 and parts[1] == "__name":
+            # 股票名称查询: sh601238,__name
+            tc = parts[0]
             url = f"http://qt.gtimg.cn/q={tc}"
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=10) as r:
