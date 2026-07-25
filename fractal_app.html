@@ -1,44 +1,215 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0f0f1a">
-<title>分形监控</title>
-<meta name="description" content="A股分形结构投射监控 — 纯前端PWA">
-<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22%E5%88%86%E5%BD%A2%E7%9B%91%E6%8E%A7%22%2C%22short_name%22%3A%22%E5%88%86%E5%BD%A2%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230f0f1a%22%2C%22theme_color%22%3A%22%230f0f1a%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%253D'http%253A%2F%2Fwww.w3.org%2F2000%2Fsvg'%2520viewBox%253D'0%25200%2520100%2520100'%253E%253Crect%2520width%253D'100'%2520height%253D'100'%2520rx%253D'20'%2520fill%253D'%25231a1a2e'%2F%253E%253Ctext%2520x%253D'50'%2520y%253D'65'%2520text-anchor%253D'middle'%2520font-size%253D'50'%2520fill%253D'%2523ffd700'%253E%E2%8C%82%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22100x100%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
+<meta name="apple-mobile-web-app-title" content="河与岸">
+<meta name="theme-color" content="#06060f">
+<meta name="description" content="河与岸分形投射系统 — A股三级嵌套包络分形监控 · 日线⊃30min⊃5min · 纯前向投射无未来函数">
+<title>河与岸 · 分形监控</title>
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22%E6%B2%B3%E4%B8%8E%E5%B2%B8%E5%88%86%E5%BD%A2%E7%9B%91%E6%8E%A7%22%2C%22short_name%22%3A%22%E6%B2%B3%E4%B8%8E%E5%B2%B8%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%2306060f%22%2C%22theme_color%22%3A%22%2306060f%22%2C%22orientation%22%3A%22portrait%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%253D'http%253A%2F%2Fwww.w3.org%2F2000%2Fsvg'%2520viewBox%253D'0%25200%2520192%2520192'%253E%253Crect%2520width%253D'192'%2520height%253D'192'%2520rx%253D'36'%2520fill%253D'%252306060f'%2F%253E%253Cpath%2520d%253D'M36%2520160%2520L60%252080%2520L84%2520128%2520L108%252032%2520L132%252096%2520L156%252056'%2520stroke%253D'%2523ffd700'%2520stroke-width%253D'4'%2520fill%253D'none'%2520stroke-linejoin%253D'round'%2F%253E%253Ccircle%2520cx%253D'60'%2520cy%253D'80'%2520r%253D'5'%2520fill%253D'%2523ffd700'%2F%253E%253Ccircle%2520cx%253D'108'%2520cy%253D'32'%2520r%253D'5'%2520fill%253D'%2523ffd700'%2F%253E%253Ccircle%2520cx%253D'156'%2520cy%253D'56'%2520r%253D'5'%2520fill%253D'%2523ffd700'%2F%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%2C%22purpose%22%3A%22any%2520maskable%22%7D%5D%7D">
+
 <style>
+/* ═════════════════════════════════════════════════════
+   河与岸分形投射系统 · 专业金融终端 UI
+   暗色 · 高对比 · 金色强调 · 移动优先
+   ═════════════════════════════════════════════════════ */
+:root{
+  --bg-deep:#06060f;--bg-card:#0d0d1a;--bg-bar:#111122;--bg-input:#0a0a18;
+  --text:#ccc;--text-dim:#777;--text-bright:#e8e8e8;
+  --gold:#ffd700;--gold-dim:#b8970e;--gold-bg:rgba(255,215,0,0.08);
+  --border:#2a2a40;--border-gold:rgba(255,215,0,0.3);
+  --green:#22c55e;--red:#ef4444;--cyan:#4cc9f0;--purple:#c89cff;--orange:#ff8c00;
+  --radius:8px;--radius-sm:6px;
+}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,'Microsoft YaHei',sans-serif;background:#0f0f1a;color:#ccc;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-#bar{display:flex;align-items:center;gap:5px;padding:6px 8px;background:#1a1a2e;border-bottom:1px solid #333;z-index:10;flex-shrink:0}
-#bar input{flex:1;background:#16213e;color:#fff;border:1px solid #555;border-radius:6px;padding:8px 8px;font-size:15px;min-width:0;outline:none}
-#bar input:focus{border-color:#ffd700}
-#bar button{background:#2a2a5a;color:#fff;border:1px solid #555;border-radius:6px;padding:8px 10px;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0}
-#bar button:active{background:#3a3a7a}
-#bar .lv{background:#1a1a3a;color:#aaa;font-size:11px;padding:5px 6px;border-radius:4px;min-width:32px;text-align:center}
-#bar .lv.on{background:#3a3a2a;color:#ffd700;border-color:#ffd700;font-weight:bold}
-#status{text-align:center;font-size:11px;padding:3px 8px;color:#888;min-height:18px;flex-shrink:0;line-height:18px}
-#stale-warn{text-align:center;font-size:10px;padding:2px 8px;color:#ff8c00;min-height:16px;flex-shrink:0;line-height:16px;cursor:pointer;display:none}
+body{
+  font-family:-apple-system,'Microsoft YaHei','PingFang SC',sans-serif;
+  background:var(--bg-deep);color:var(--text);
+  min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;overflow:hidden;
+}
+/* ── 导航栏 ── */
+#navbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 10px;background:var(--bg-bar);border-bottom:1px solid var(--border-gold);
+  flex-shrink:0;z-index:20;
+}
+#navbar .brand{
+  font-size:14px;font-weight:700;color:var(--gold);
+  letter-spacing:1px;display:flex;align-items:center;gap:6px;
+}
+#navbar .brand::before{content:'⌂';font-size:18px;}
+#navbar .ver{font-size:10px;color:var(--text-dim);background:var(--bg-card);padding:2px 6px;border-radius:10px;}
+/* ── 操作栏 ── */
+#bar{
+  display:flex;align-items:center;gap:5px;padding:6px 8px;
+  background:var(--bg-bar);border-bottom:1px solid var(--border);flex-shrink:0;
+}
+#bar input{
+  flex:1;background:var(--bg-input);color:#fff;border:1px solid #444;
+  border-radius:var(--radius-sm);padding:8px;font-size:15px;min-width:0;outline:none;
+  transition:border-color .2s;
+}
+#bar input:focus{border-color:var(--gold);box-shadow:0 0 8px var(--gold-bg)}
+#bar button{
+  background:#1e1e3a;color:#ddd;border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:8px 10px;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0;
+  transition:background .15s,border-color .15s;
+}
+#bar button:hover{background:#2a2a50}
+#bar button:active{background:#3a3a6a}
+#bar #go{background:var(--gold-dim);color:#000;border-color:var(--gold);font-weight:700;font-size:14px}
+#bar #go:hover{background:var(--gold)}
+#bar .lv{
+  background:#141428;color:#888;font-size:11px;padding:5px 6px;border-radius:4px;
+  min-width:32px;text-align:center;border:1px solid transparent;
+}
+#bar .lv.on{
+  background:rgba(255,215,0,0.15);color:var(--gold);
+  border-color:var(--border-gold);font-weight:700;
+}
+/* ── 状态行 ── */
+#status{
+  text-align:center;font-size:11px;padding:3px 8px;color:var(--text-dim);
+  min-height:18px;flex-shrink:0;line-height:18px;background:var(--bg-deep);
+}
+#stale-warn{
+  text-align:center;font-size:10px;padding:2px 8px;color:var(--orange);
+  min-height:16px;flex-shrink:0;line-height:16px;cursor:pointer;display:none;
+  background:rgba(255,140,0,0.06);
+}
 #stale-warn.show{display:block}
-#chart-wrap{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;display:flex;align-items:flex-start;justify-content:center;min-height:0}
+/* ── 风险横幅 ── */
+#risk-warn{
+  text-align:center;font-size:9px;padding:4px 8px;color:var(--red);
+  background:rgba(239,68,68,0.06);min-height:14px;flex-shrink:0;line-height:1.4;
+  border-bottom:1px solid rgba(239,68,68,0.15);
+}
+/* ── 报价条 ── */
+#ticker{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  padding:5px 8px;background:var(--bg-card);border-bottom:1px solid var(--border);
+  font-size:11px;flex-shrink:0;min-height:26px;flex-wrap:wrap;
+}
+#ticker .t-name{color:var(--text-bright);font-weight:600}
+#ticker .t-price{color:#fff;font-weight:700;font-size:13px}
+#ticker .t-change{font-weight:600}
+#ticker .t-change.up{color:var(--green)}
+#ticker .t-change.down{color:var(--red)}
+#ticker .t-mkt{font-size:9px;padding:2px 6px;border-radius:10px;font-weight:600}
+#ticker .t-mkt.open{background:rgba(76,201,240,0.15);color:var(--cyan)}
+#ticker .t-mkt.closed{background:rgba(136,136,136,0.15);color:var(--text-dim)}
+#ticker .t-mkt.pre{background:rgba(255,140,0,0.12);color:var(--orange)}
+/* ── 图表区 ── */
+#chart-wrap{
+  flex:1;overflow:auto;-webkit-overflow-scrolling:touch;
+  display:flex;align-items:flex-start;justify-content:center;min-height:0;
+  position:relative;
+}
 canvas{display:block;max-width:100%;height:auto}
-#info{font-size:10px;background:#1a1a2e;border-top:1px solid #333;line-height:1.6;flex-shrink:0;padding:6px 8px;max-height:30vh;overflow-y:auto}
-#info .gen{color:#4cc9f0}
-#info .res{color:#ffd700}
-#info .prj{color:#ff8c00}
-#info .regime{font-weight:bold;font-size:11px}
-#info .bull{color:#4caf50}
-#info .bear{color:#f44336}
-#info .range{color:#ff9800}
-#toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;padding:8px 16px;border-radius:20px;font-size:13px;z-index:99;pointer-events:none;opacity:0;transition:opacity .3s}
+/* ── 图例（叠加在canvas上）── */
+#chart-legend{
+  position:absolute;top:6px;right:8px;display:flex;gap:10px;
+  font-size:9px;color:var(--text-dim);background:rgba(6,6,15,0.8);
+  padding:3px 6px;border-radius:4px;pointer-events:none;z-index:5;
+}
+#chart-legend .leg{display:flex;align-items:center;gap:3px}
+#chart-legend .leg .dot{width:8px;height:3px;border-radius:1px}
+#chart-legend .leg .dot.w{background:rgba(255,180,0,.7)}
+#chart-legend .leg .dot.d{background:rgba(255,200,0,.8)}
+#chart-legend .leg .dot.m{background:rgba(200,140,255,.8)}
+#chart-legend .leg .dot.f{background:var(--cyan)}
+/* ── 信息面板（三Tab）── */
+#info{
+  font-size:10px;background:var(--bg-card);border-top:2px solid var(--border-gold);
+  line-height:1.6;flex-shrink:0;max-height:32vh;overflow-y:auto;
+}
+#info-tabs{
+  display:flex;border-bottom:1px solid var(--border);
+  position:sticky;top:0;background:var(--bg-card);z-index:2;
+}
+#info-tabs button{
+  flex:1;background:none;color:var(--text-dim);border:none;
+  padding:7px 4px;font-size:11px;cursor:pointer;border-bottom:2px solid transparent;
+  transition:color .15s,border-color .15s;font-family:inherit;
+}
+#info-tabs button:hover{color:var(--text)}
+#info-tabs button.on{color:var(--gold);border-bottom-color:var(--gold);font-weight:600}
+.info-tab{display:none;padding:6px 8px}
+.info-tab.show{display:block}
+.info-tab table{width:100%;border-collapse:collapse}
+.info-tab td,.info-tab th{padding:2px 4px;text-align:center}
+.info-tab th{color:var(--text-dim);font-weight:400;font-size:9px;border-bottom:1px solid var(--border)}
+.info-tab .hl{color:var(--gold);font-weight:600}
+.info-tab .gen{color:var(--cyan)}
+.info-tab .prj{color:var(--orange)}
+.info-tab .regime{font-weight:700;font-size:12px}
+.info-tab .bull{color:var(--green)}
+.info-tab .bear{color:var(--red)}
+.info-tab .range{color:var(--orange)}
+/* ── 投射卡片 ── */
+.proj-card{
+  background:rgba(255,255,255,0.03);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:6px 8px;margin-bottom:4px;
+}
+.proj-card .p-level{font-weight:700;font-size:10px;margin-bottom:3px}
+.proj-card .p-level.w{color:rgba(255,180,0,1)}
+.proj-card .p-level.d{color:rgba(255,200,0,1)}
+.proj-card .p-level.m{color:var(--purple)}
+.proj-card .p-level.f{color:var(--cyan)}
+.proj-card .p-range{display:flex;justify-content:space-between;font-size:10px}
+.proj-card .p-range .hi{color:var(--red)}
+.proj-card .p-range .lo{color:var(--green)}
+/* ── 参数网格 ── */
+.param-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:3px 8px;font-size:10px;
+}
+.param-grid .pk{color:var(--text-dim)}
+.param-grid .pv{color:var(--text-bright);text-align:right;font-weight:600}
+/* ── Toast ── */
+#toast{
+  position:fixed;bottom:60px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.9);color:#fff;padding:8px 18px;border-radius:20px;
+  font-size:13px;z-index:99;pointer-events:none;opacity:0;transition:opacity .3s;
+  border:1px solid var(--border-gold);
+}
 #toast.show{opacity:1}
-#risk-warn{text-align:center;font-size:9px;padding:4px 8px;color:#f44336;background:rgba(244,67,54,0.08);min-height:14px;flex-shrink:0;line-height:1.4;border-bottom:1px solid rgba(244,67,54,0.2)}
-#footer{text-align:center;font-size:9px;padding:4px 8px;color:#555;flex-shrink:0;line-height:14px;border-top:1px solid #222}
+/* ── 免责声明（可折叠）── */
+#disclaimer-wrap{
+  flex-shrink:0;border-top:1px solid var(--border);
+}
+#disclaimer-toggle{
+  width:100%;background:var(--bg-bar);color:var(--text-dim);border:none;
+  padding:4px 8px;font-size:9px;cursor:pointer;text-align:center;font-family:inherit;
+  transition:color .15s;
+}
+#disclaimer-toggle:hover{color:var(--text)}
+#disclaimer-toggle::after{content:' ▸';font-size:8px}
+#disclaimer-toggle.open::after{content:' ▾'}
+#disclaimer-body{
+  display:none;font-size:8px;color:#666;padding:4px 8px;line-height:1.5;
+  background:var(--bg-deep);text-align:center;
+}
+#disclaimer-body.show{display:block}
+/* ── 页脚 ── */
+#footer{
+  text-align:center;font-size:9px;padding:5px 8px;color:#444;
+  flex-shrink:0;line-height:14px;border-top:1px solid var(--border);
+  background:var(--bg-bar);
+}
+#footer .ver{color:var(--gold-dim)}
 </style>
 </head>
 <body>
+<!-- ═══ 导航栏 ═══ -->
+<div id="navbar">
+  <span class="brand">河与岸 分形监控</span>
+  <span class="ver">v5</span>
+</div>
+
+<!-- ═══ 操作栏 ═══ -->
 <div id="bar">
   <input id="code" type="text" placeholder="输入代码" value="601238" inputmode="numeric" maxlength="6">
   <button id="go">▶</button>
@@ -46,18 +217,61 @@ canvas{display:block;max-width:100%;height:auto}
   <button class="lv" data-lv="weekly">周</button>
   <button class="lv" data-lv="daily">日</button>
   <button class="lv" data-lv="30min">30</button>
-  <button id="btnRefresh" style="background:#1a1a2a;border:1px dashed #555;border-radius:6px;padding:6px 8px;font-size:11px;color:#888;cursor:pointer;flex-shrink:0" onclick="toggleRefresh()" title="自动刷新（60秒）">⏱</button>
-  <button id="btnSync" style="background:#1a1a2a;border:1px solid #444;border-radius:6px;padding:6px 8px;font-size:13px;cursor:pointer;flex-shrink:0;display:none" onclick="syncPivots()" title="从GitHub拉取最新拐点数据">🔄</button>
+  <button id="btnRefresh" style="background:#141428;border:1px dashed #444;border-radius:6px;padding:6px 8px;font-size:11px;color:var(--text-dim);cursor:pointer;flex-shrink:0" onclick="toggleRefresh()" title="自动刷新（60秒）">⏱</button>
+  <button id="btnSync" style="background:#141428;border:1px solid #444;border-radius:6px;padding:6px 8px;font-size:13px;cursor:pointer;flex-shrink:0;display:none" onclick="syncPivots()" title="从GitHub拉取最新拐点数据">🔄</button>
 </div>
+
 <div id="status">输入6位代码，点击 ▶ 或回车</div>
 <div id="risk-warn">⚠️ 没有高手，没有万能药，盈亏在心，所有预测都是欺骗；软件只是换个角度看市场，改变不了贪嗔痴和盈亏；市场无敌，熊市最好的方法是不操作，永不亏钱的方法是不碰股票；【仅限内部交流，转发分享违法，切记！】</div>
+
+<!-- ═══ 报价条 ═══ -->
+<div id="ticker"><span>—</span></div>
+
 <div id="stale-warn" onclick="this.remove()"></div>
-<div id="chart-wrap"><canvas id="c"></canvas></div>
-<div id="info"></div>
-<div id="footer">分形监控 v4 · © wsx · 内部交流 禁止转发</div>
+<div id="chart-wrap">
+  <div id="chart-legend">
+    <span class="leg"><span class="dot w"></span>周线</span>
+    <span class="leg"><span class="dot d"></span>日线</span>
+    <span class="leg"><span class="dot m"></span>30min</span>
+    <span class="leg"><span class="dot f"></span>5min</span>
+  </div>
+  <canvas id="c"></canvas>
+</div>
+
+<!-- ═══ 信息面板（三Tab）═══ -->
+<div id="info">
+  <div id="info-tabs">
+    <button class="on" data-tab="fractal">分形</button>
+    <button data-tab="project">投射</button>
+    <button data-tab="params">参数</button>
+  </div>
+  <div id="tab-fractal" class="info-tab show"></div>
+  <div id="tab-project" class="info-tab"></div>
+  <div id="tab-params" class="info-tab"></div>
+</div>
+
+<!-- ═══ 免责声明（可折叠）═══ -->
+<div id="disclaimer-wrap">
+  <button id="disclaimer-toggle" onclick="this.classList.toggle('open');document.getElementById('disclaimer-body').classList.toggle('show')">免责声明</button>
+  <div id="disclaimer-body">
+    本工具仅展示分形结构的数学投射，不构成任何投资建议。所有投射基于历史价格形态推演，具有不确定性。市场有风险，投资需谨慎。数据来源：腾讯行情。内部交流使用，禁止转发分享。
+  </div>
+</div>
+
+<!-- ═══ 页脚 ═══ -->
+<div id="footer">
+  河与岸分形监控 <span class="ver">v5</span> · &copy; 虾统帅 · 内部交流 禁止转发
+</div>
+
 <div id="toast"></div>
 
+
 <script>
+// ═══════════════════════════════════════════════════
+//  河与岸分形监控 v5 — 独立PWA，纯前端
+//  数据源：预计算拐点 / serve.py全量 / IndexedDB / 腾讯API
+// ═══════════════════════════════════════════════════
+
 // ═══════════════════════════════════════════════════
 //  分形监控 v2 — 独立PWA，纯前端，数据全从腾讯直拉
 //  部署到任意静态托管（GitHub Pages/手机本地HTTP）
@@ -76,6 +290,18 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
 }
+
+// ── Tab 切换 ──
+document.getElementById('info-tabs').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  document.querySelectorAll('#info-tabs button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  document.querySelectorAll('.info-tab').forEach(t => t.classList.remove('show'));
+  document.getElementById('tab-' + btn.dataset.tab).classList.add('show');
+});
+
+
 
 // ── UI ──
 document.querySelectorAll('.lv').forEach(b => {
@@ -480,6 +706,7 @@ async function run() {
     ]);
     st.textContent = `📊 ${code} ${name}`;
     st.style.color = '#ffd700';
+  updateTicker(code, name);
 
     const bars5 = rows5.map(r => ({ ...r, c: Math.round(r.c * 100) / 100 }));
     const m30 = group30min(bars5);
@@ -726,45 +953,89 @@ function detectRegime(fD) {
 }
 
 function updateInfo(code, name, fD, gW, gD, g30, g5, ptsW, ptsD, pts30, pts5, sepX, WW, WD, W30, W5, pivots) {
-  const el = document.getElementById('info');
-  const parts = [];
-  // 市场状态第一行
-  const regime = detectRegime(fD);
-  if (regime) parts.push(`<span class="regime ${regime.cls}">${regime.label}</span>`);
-  // 数据来源
-  if (pivots) {
-    parts.push(`<span style="color:#888;font-size:10px">📡 拐点: ${pivots.updated}</span>`);
+  // ── Tab 1: 分形 ──
+  var tf = document.getElementById('tab-fractal');
+  var rows = [];
+  rows.push('<table class="fx-table"><tr><th>周期</th><th>生成器序列</th><th>波</th></tr>');
+  function rowGen(lvl, g, w) {
+    if (g && g.vals && g.vals.length >= 3)
+      rows.push('<tr><td>' + lvl + '</td><td class="hl">' + g.vals.map(function(v){return v.toFixed(2);}).join(' → ') + '</td><td>' + w + '</td></tr>');
   }
-  if (gW && gW.vals.length >= 3)
-    parts.push(`<span class="gen">周线生成器:</span> ${gW.vals.map(v=>v.toFixed(2)).join(' → ')} | 波数=${WW}`);
-  if (gD && gD.vals.length >= 3)
-    parts.push(`<span class="gen">日线生成器:</span> ${gD.vals.map(v=>v.toFixed(2)).join(' → ')} | 波数=${WD}`);
-  if (g30 && g30.vals.length >= 3)
-    parts.push(`<span class="gen">30min生成器:</span> ${g30.vals.map(v=>v.toFixed(2)).join(' → ')} | 波数=${W30}`);
-  if (g5 && g5.vals.length >= 3)
-    parts.push(`<span class="gen">5min生成器:</span> ${g5.vals.map(v=>v.toFixed(2)).join(' → ')} | 波数=${W5}`);
-  const projW = ptsW.filter(p => p.x > sepX);
-  const projD = ptsD.filter(p => p.x > sepX * 8);
-  const proj30 = pts30.filter(p => p.x > sepX);
-  const proj5 = pts5.filter(p => p.x > sepX);
-  if (projW.length) {
-    const hi = Math.max(...projW.map(p=>p.y)), lo = Math.min(...projW.map(p=>p.y));
-    parts.push(`<span class="prj">周线投射:</span> 高 ${hi.toFixed(2)} 低 ${lo.toFixed(2)}`);
+  rowGen('周线', gW, WW); rowGen('日线', gD, WD); rowGen('30min', g30, W30); rowGen('5min', g5, W5);
+  rows.push('</table>');
+  tf.innerHTML = rows.join('');
+
+  // ── Tab 2: 投射 ──
+  var tp = document.getElementById('tab-project');
+  var cards = [];
+  var projW = ptsW.filter(function(p){return p.x > sepX;});
+  var projD = ptsD.filter(function(p){return p.x > sepX * 8;});
+  var proj30 = pts30.filter(function(p){return p.x > sepX;});
+  var proj5 = pts5.filter(function(p){return p.x > sepX;});
+  function addCard(name, cls, proj) {
+    if (!proj.length) return;
+    var hi = Math.max.apply(null, proj.map(function(p){return p.y;}));
+    var lo = Math.min.apply(null, proj.map(function(p){return p.y;}));
+    cards.push('<div class="proj-card"><span class="plvl ' + cls + '">' + name + '</span><span class="prng"><em>高</em> ' + hi.toFixed(2) + ' <em>低</em> ' + lo.toFixed(2) + '</span></div>');
   }
-  if (projD.length) {
-    const hi = Math.max(...projD.map(p=>p.y)), lo = Math.min(...projD.map(p=>p.y));
-    parts.push(`<span class="prj">日线投射:</span> 高 ${hi.toFixed(2)} 低 ${lo.toFixed(2)}`);
-  }
-  if (proj30.length) {
-    const hi = Math.max(...proj30.map(p=>p.y)), lo = Math.min(...proj30.map(p=>p.y));
-    parts.push(`<span class="prj">30min投射:</span> 高 ${hi.toFixed(2)} 低 ${lo.toFixed(2)}`);
-  }
-  if (proj5.length) {
-    const hi = Math.max(...proj5.map(p=>p.y)), lo = Math.min(...proj5.map(p=>p.y));
-    parts.push(`<span class="prj">5min投射:</span> 高 ${hi.toFixed(2)} 低 ${lo.toFixed(2)}`);
-  }
-  el.innerHTML = parts.join('<br>');
+  addCard('周线投射', 'w', projW); addCard('日线投射', 'd', projD);
+  addCard('30min投射', 'm', proj30); addCard('5min投射', 'f', proj5);
+  tp.innerHTML = cards.length ? cards.join('') : '<div style="color:#777;text-align:center;padding:8px">暂无投射数据</div>';
+
+  // ── Tab 3: 参数 ──
+  var tr = document.getElementById('tab-params');
+  var regime = detectRegime(fD);
+  var p = [];
+  if (regime) p.push('<span class="pkv">市场</span><span class="pval ' + regime.cls + '">' + regime.label + '</span>');
+  if (pivots) p.push('<span class="pkv">拐点</span><span class="pval" style="font-size:9px">' + pivots.updated + '</span>');
+  p.push('<span class="pkv">波数W/D/30/5</span><span class="pval">' + WW + '/' + WD + '/' + W30 + '/' + W5 + '</span>');
+  tr.innerHTML = '<div class="param-grid">' + p.join('') + '</div>';
 }
+
+
+
+// ── 报价条 ──
+async function updateTicker(code, name) {
+  var t = document.getElementById('ticker');
+  try {
+    var tc = (code.startsWith('6') ? 'sh' : 'sz') + code;
+    var resp = await fetch('https://qt.gtimg.cn/q=' + tc);
+    if (resp.ok) {
+      var text = await resp.text();
+      var parts = text.split('~');
+      if (parts.length > 4) {
+        var price = parseFloat(parts[3]);
+        var prev = parseFloat(parts[4]);
+        var chg = price - prev;
+        var pct = prev ? (chg / prev * 100) : 0;
+        var up = chg >= 0;
+        t.innerHTML = '<span class="t-name">' + name + '</span><span class="t-code">' + code + '</span><span class="t-price">' + price.toFixed(2) + '</span><span class="t-change ' + (up ? 'up' : 'down') + '">' + (up ? '+' : '') + chg.toFixed(2) + ' (' + (up ? '+' : '') + pct.toFixed(2) + '%)</span>';
+        return;
+      }
+    }
+  } catch(e) {}
+  t.innerHTML = '<span class="t-name">' + name + '</span><span class="t-code">' + code + '</span><span class="t-price">—</span>';
+}
+
+// ── 清除按钮 ──
+(function(){
+  var inp = document.getElementById('code');
+  var clr = document.getElementById('clear-btn');
+  if (inp && clr) {
+    inp.addEventListener('input', function(){ clr.style.display = inp.value ? '' : 'none'; });
+    clr.addEventListener('click', function(){ inp.value = ''; clr.style.display = 'none'; inp.focus(); });
+  }
+})();
+
+// ── 免责声明折叠 ──
+function toggleDisclaimer() {
+  var btn = document.getElementById('disc-toggle');
+  var body = document.getElementById('disc-body');
+  var show = body.style.display !== 'block';
+  body.style.display = show ? 'block' : 'none';
+  btn.classList.toggle('open', show);
+}
+
 
 // ── Service Worker (PWA 离线缓存) ──
 if ('serviceWorker' in navigator) {
@@ -806,7 +1077,9 @@ function toggleRefresh() {
     clearInterval(refreshTimer);
   }
 }
+
 </script>
+
 
 <!-- ── Cloudflare Web Analytics（免费、无Cookie、隐私友好）──
      注册 https://dash.cloudflare.com/sign-up → Web Analytics → 添加站点
