@@ -1,0 +1,12 @@
+[theme]
+base="dark"
+primaryColor="#ffd700"
+backgroundColor="#1a1a2e"
+secondaryBackgroundColor="#16213e"
+textColor="#cccccc"
+
+[server]
+maxUploadSize = 1
+
+[browser]
+serverAddress = "0.0.0.0"
