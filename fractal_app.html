@@ -261,7 +261,7 @@ async function fetchKline(code, period, count) {
     // ── L3b: CORS被拦？走Streamlit代理 ──
     console.warn('腾讯直连失败，走Streamlit代理', e.message);
     try {
-      const proxyUrl = `https://fenxing-epepqv7dy4odxxx9pnwm57.streamlit.app/api/kline?code=${tc}&period=${period}&count=${count}`;
+      const proxyUrl = `https://fenxing-epepqv7dy4odxxx9pnwm57.streamlit.app/?code=${tc}&period=${period}&count=${count}`;
       const resp2 = await fetch(proxyUrl);
       if (!resp2.ok) throw new Error(`Proxy HTTP ${resp2.status}`);
       const data2 = await resp2.json();
@@ -299,11 +299,11 @@ async function fetchName(code) {
   } catch(e) {}
   // 兜底：走Streamlit代理
   try {
-    const resp2 = await fetch(`https://fenxing-epepqv7dy4odxxx9pnwm57.streamlit.app/api/name?code=${tc}`);
-    if (resp2.ok) {
-      const data = await resp2.json();
-      if (data.name) return data.name;
-    }
+      const resp2 = await fetch(`https://fenxing-epepqv7dy4odxxx9pnwm57.streamlit.app/?name_code=${tc}`);
+      if (resp2.ok) {
+        const data2 = await resp2.json();
+        if (data2.name) return data2.name;
+      }
   } catch(e2) {}
   return code; // 最终兜底：返回代码本身
 }
