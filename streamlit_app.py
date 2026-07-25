@@ -69,6 +69,21 @@ PROXY_HTML = """<!DOCTYPE html><html><body>
     }
   });
 
+  // 就绪信号 + 轮询：清理启动时可能已存在的未处理请求
+  localStorage.setItem('fx_ready', '1');
+  (function poll(){
+    for (var i=0; i<localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.startsWith('fx_req_')) {
+        var v = localStorage.getItem(k);
+        localStorage.removeItem(k);  // 移除后触发storage事件
+        localStorage.setItem(k, v);  // 重新写入触发storage事件
+        break;  // 一次只处理一个，下次轮询继续
+      }
+    }
+    setTimeout(poll, 200);
+  })();
+
   console.log('🔄 代理iframe就绪');
 })();
 </script>
